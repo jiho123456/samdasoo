@@ -52,6 +52,17 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    # 헌재 의뢰 테이블 (청구 테이블)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS petitions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            content TEXT,
+            timestamp TEXT,
+            username TEXT,
+            status TEXT DEFAULT '처리 안됨'
+        )
+    ''')
     conn.commit()
     return conn
 
@@ -251,7 +262,7 @@ elif menu == "우리 반 명단":
 elif menu == "헌재":
     st.header("⚖️ 헌재")
     st.markdown("""
-    **삼다수 헌재**는 판결을 부탁할 시 공정한 결정을 내리는 **헌법재판소** 역할을 합니다.
+    **삼다수 헌재**는 판결 또는 의뢰를 부탁할 시, 공정한 결정을 내리는 **헌법재판소** 역할을 합니다.
     
     ### 재판관 소개
     1. **송선우** | *첫 재판의 재판관 및 Founder*
@@ -270,13 +281,58 @@ elif menu == "헌재":
     ###### 인용과 각하는 반드시 3명 이상 찬성 시 이행,
     ###### 인용이 아니라면 기각.
     
-    ---
-    
-    **[삼다수 헌재]** 의 이름 아래, 우리 반의 정의와 공정함을 지켜냅니다.
-    편파판정 **절대금지**.
+    ---  
     """)
-    if st.button("새로고침"):
-        st.rerun()
+    # 하단에 가능한 시간 안내 (작은 글씨)
+    st.markdown("<small>※ 헌재 의뢰 가능 시간: 월~금 1교시 쉬는시간부터 점심시간까지</small>", unsafe_allow_html=True)
+    st.markdown("---")
+    
+    c = conn.cursor()
+    
+    # 일반 사용자: 헌재 의뢰 제출 폼
+    if not st.session_state.is_admin:
+        st.subheader("헌재에 의뢰하기")
+        with st.form("petition_form", clear_on_submit=True):
+            pet_title = st.text_input("의뢰 제목", placeholder="제목을 입력하세요")
+            pet_content = st.text_area("의뢰 내용", placeholder="내용을 입력하세요")
+            submitted_pet = st.form_submit_button("의뢰 제출")
+            if submitted_pet and pet_title and pet_content:
+                now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                username = st.session_state.username
+                c.execute("INSERT INTO petitions (title, content, timestamp, username) VALUES (?,?,?,?)",
+                          (pet_title, pet_content, now, username))
+                conn.commit()
+                st.success("의뢰가 제출되었습니다!")
+    
+    # 모든 의뢰 목록 표시 (관리자와 일반 사용자 모두 확인)
+    st.subheader("제출된 의뢰 목록")
+    c.execute("SELECT id, title, content, timestamp, username, status FROM petitions ORDER BY id DESC")
+    petitions = c.fetchall()
+    if petitions:
+        for pet in petitions:
+            pet_id, pet_title, pet_content, pet_timestamp, pet_username, pet_status = pet
+            st.markdown(f"**[{pet_id}] {pet_title}**  _(작성일: {pet_timestamp}, 작성자: {pet_username}, 상태: {pet_status})_")
+            st.write(pet_content)
+            # 관리자라면 상태 변경 및 삭제 기능 제공
+            if st.session_state.logged_in and st.session_state.is_admin:
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_status = st.selectbox(f"상태 변경 (ID {pet_id})", 
+                                              ['처리 안됨', '처리 중', '인용', '기각', '각하'], 
+                                              index=['처리 안됨', '처리 중', '인용', '기각', '각하'].index(pet_status),
+                                              key=f"status_{pet_id}")
+                with col2:
+                    if st.button(f"상태 업데이트 (ID {pet_id})", key=f"update_{pet_id}"):
+                        c.execute("UPDATE petitions SET status=? WHERE id=?", (new_status, pet_id))
+                        conn.commit()
+                        st.success("상태가 업데이트되었습니다!")
+                if st.button(f"삭제 (ID {pet_id})", key=f"delete_pet_{pet_id}"):
+                    c.execute("DELETE FROM petitions WHERE id=?", (pet_id,))
+                    conn.commit()
+                    st.success("의뢰가 삭제되었습니다!")
+            st.markdown("---")
+    else:
+        st.info("등록된 의뢰가 없습니다.")
 
 elif menu == "자율동아리":
     st.header("🎨 자율동아리")
