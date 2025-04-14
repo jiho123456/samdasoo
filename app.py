@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import pandas as pd
+from streamlit_autorefresh import st_autorefresh  # <-- Import the autorefresh component
 
 # ---------------------------
 # 데이터베이스 초기화 함수
@@ -69,6 +70,12 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []  # 각 채팅 메시지는 (닉네임, 메시지, 타임스탬프) 튜플
 
 # ---------------------------
+# 자동 새로고침 (글로벌 채팅 등 실시간 업데이트를 위한)
+# ---------------------------
+# Auto–refresh every 3 seconds
+_ = st_autorefresh(interval=3000, key="global_autorefresh")
+
+# ---------------------------
 # 사이드바: 로그인 / 회원가입 / 게스트 로그인
 # ---------------------------
 with st.sidebar.expander("로그인 / 회원가입"):
@@ -89,7 +96,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 submitted = st.form_submit_button("로그인")
                 if submitted:
                     c = conn.cursor()
-                    # 관리자 인증을 위한 비밀번호 검사 (비밀번호가 "3.141592"이면 관리자 인증)
+                    # 관리자 인증: 비밀번호 "3.141592"로 관리자 인증 시도
                     if password == "3.141592":
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
@@ -297,6 +304,8 @@ elif menu == "자율동아리":
                 st.markdown("**멤버:** 없음")
             
             # 동아리 채팅방 (Expander 사용)
+            # Auto-refresh for club chat (every 3 seconds)
+            _ = st_autorefresh(interval=3000, key=f"club_chat_{cid}")
             with st.expander("동아리 채팅방"):
                 st.markdown("동아리 채팅 메시지")
                 # 동아리 채팅 입력 폼
@@ -304,7 +313,7 @@ elif menu == "자율동아리":
                     club_message = st.text_input("메시지 입력", placeholder="내용 입력")
                     submitted_chat = st.form_submit_button("전송")
                     if submitted_chat and club_message:
-                        now = datetime.now().strftime("%Y-%m-%d")
+                        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         username = st.session_state.username
                         c.execute("INSERT INTO club_chats (club_id, username, message, timestamp) VALUES (?,?,?,?)",
                                   (cid, username, club_message, now))
