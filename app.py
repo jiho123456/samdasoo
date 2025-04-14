@@ -3,6 +3,27 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 
+st.markdown(
+    """
+    <style>
+    /* 사이드바 토글 버튼에 "메뉴" 라벨 추가 */
+    button[data-testid="stSidebarNav"]::before {
+        content: "메뉴";
+        font-size: 16px;
+        position: absolute;
+        top: 8px;
+        left: 40px;
+        color: black;
+        background-color: white;
+        padding: 2px 6px;
+        border-radius: 4px;
+        z-index: 100;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # ---------------------------
 # 데이터베이스 초기화 함수
