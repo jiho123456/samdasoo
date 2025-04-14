@@ -3,28 +3,6 @@ import sqlite3
 from datetime import datetime
 import pandas as pd
 
-st.markdown(
-    """
-    <style>
-    /* 사이드바 토글 버튼에 "메뉴" 라벨 추가 */
-    button[data-testid="stSidebarNav"]::before {
-        content: "메뉴";
-        font-size: 16px;
-        position: absolute;
-        top: 8px;
-        left: 40px;
-        color: black;
-        background-color: white;
-        padding: 2px 6px;
-        border-radius: 4px;
-        z-index: 100;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
 # ---------------------------
 # 데이터베이스 초기화 함수
 # ---------------------------
@@ -78,6 +56,46 @@ def init_db():
     return conn
 
 conn = init_db()
+
+# ---------------------------
+# 토글 버튼에 레이블 붙이기
+# ---------------------------
+st.markdown("""
+    <style>
+        /* 토글 버튼의 부모 요소를 기준으로 작업 */
+        div[data-testid="stSidebarNav"] {
+            position: relative;
+        }
+        /* "메뉴" 라벨 스타일 */
+        .menu-label {
+            position: absolute;
+            top: 8px;
+            left: 45px;
+            font-size: 14px;
+            color: #000;
+            background-color: #fff;
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 10;
+        }
+    </style>
+    <script>
+        // 페이지 로드 후 혹은 일정 주기로 실행해 토글 버튼을 찾고 라벨을 추가
+        function addMenuLabel() {
+            const sidebarNav = document.querySelector('div[data-testid="stSidebarNav"]');
+            if(sidebarNav && !document.querySelector('.menu-label')){
+                const label = document.createElement('div');
+                label.className = 'menu-label';
+                label.innerText = '메뉴';
+                sidebarNav.appendChild(label);
+            }
+        }
+        // 페이지 로드 직후와 1초 간격으로 시도
+        window.addEventListener('load', addMenuLabel);
+        setInterval(addMenuLabel, 1000);
+    </script>
+""", unsafe_allow_html=True)
+
 
 # ---------------------------
 # 세션 상태 초기화 (로그인/채팅)
