@@ -2,7 +2,6 @@ import streamlit as st
 import sqlite3
 from datetime import datetime
 import pandas as pd
-from streamlit_autorefresh import st_autorefresh  # <-- Import the autorefresh component
 
 # ---------------------------
 # 데이터베이스 초기화 함수
@@ -70,12 +69,6 @@ if "chat_messages" not in st.session_state:
     st.session_state.chat_messages = []  # 각 채팅 메시지는 (닉네임, 메시지, 타임스탬프) 튜플
 
 # ---------------------------
-# 자동 새로고침 (글로벌 채팅 등 실시간 업데이트를 위한)
-# ---------------------------
-# Auto–refresh every 3 seconds
-_ = st_autorefresh(interval=3000, key="global_autorefresh")
-
-# ---------------------------
 # 사이드바: 로그인 / 회원가입 / 게스트 로그인
 # ---------------------------
 with st.sidebar.expander("로그인 / 회원가입"):
@@ -96,7 +89,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 submitted = st.form_submit_button("로그인")
                 if submitted:
                     c = conn.cursor()
-                    # 관리자 인증: 비밀번호 "3.141592"로 관리자 인증 시도
+                    # 관리자 인증: 비밀번호가 "3.141592"이면 관리자 인증 시도
                     if password == "3.141592":
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
@@ -149,7 +142,7 @@ menu = st.sidebar.radio("페이지 이동", ["홈", "채팅방", "미니 블로�
 with st.container():
     st.image('assets/logo.png', width=250)
     st.title("🌊 5-9 삼다수반")
-    st.markdown("#### 안녕하세요? 제작자인 양지호입니다. 왼쪽에 보시면 탭들이 있으니 우선 채팅방부터 구경하고 가시는걸 추천드립니다.")
+    st.markdown("#### 안녕하세요? 제작자인 양지호입니다. 왼쪽 탭에서 원하는 메뉴를 선택하세요.")
 
 # ---------------------------
 # 각 페이지별 기능 구현
@@ -158,11 +151,13 @@ if menu == "홈":
     st.header("🏠 홈")
     st.markdown("""
     **삼다수반** 웹사이트입니다.  
-    이 웹사이트는 채팅방에서 대화하고, 공지? 같은것도 올리며 **즐겁게 생활하는** 것을
+    이 웹사이트는 채팅방에서 대화하고, 공지? 같은 것도 올리며 **즐겁게 생활하는** 것을
     돕는 것이 목적입니다.
     """)
     mood = st.selectbox("📆 오늘의 기분은?", ["😄 행복해!", "😎 멋져!", "😴 피곤해...", "🥳 신나!"])
     st.write(f"오늘의 기분: {mood}")
+    if st.button("새로고침"):
+        st.rerun()
 
 elif menu == "채팅방":
     st.header("💬 채팅방")
@@ -181,11 +176,12 @@ elif menu == "채팅방":
             st.markdown(f"**[{timestamp}] {nick}**: {msg}")
     else:
         st.info("아직 없네여")
+    if st.button("새로고침"):
+        st.rerun()
 
 elif menu == "미니 블로그":
     st.header("📘 미니 블로그")
     st.markdown("걍 뭐 블로그인듯 블로그아닌 블로그같은 미니블로그입니다")
-    # 블로그 글 작성 폼 (SQLite 저장)
     with st.form("blog_form", clear_on_submit=True):
         title = st.text_input("글 제목", placeholder="제목 입력")
         content = st.text_area("글 내용", placeholder="내용을 입력하세요")
@@ -207,7 +203,6 @@ elif menu == "미니 블로그":
             post_id, title, content, timestamp, author = row
             st.markdown(f"**{title}**  _(작성일: {timestamp}, 작성자: {author})_")
             st.write(content)
-            # 관리자이면 삭제 버튼 보임
             if st.session_state.logged_in and st.session_state.is_admin:
                 if st.button(f"삭제 (ID {post_id})", key=f"delete_{post_id}"):
                     c.execute("DELETE FROM blog_posts WHERE id=?", (post_id,))
@@ -216,6 +211,8 @@ elif menu == "미니 블로그":
             st.markdown("---")
     else:
         st.info("글 없음 o^0^o")
+    if st.button("새로고침"):
+        st.rerun()
 
 elif menu == "우리 반 명단":
     st.header("👥 우리 반 명단")
@@ -226,6 +223,8 @@ elif menu == "우리 반 명단":
     }
     roster_df = pd.DataFrame(data)
     st.table(roster_df)
+    if st.button("새로고침"):
+        st.rerun()
 
 elif menu == "헌재":
     st.header("⚖️ 헌재")
@@ -242,7 +241,7 @@ elif menu == "헌재":
     ### 용어 설명
     - **인용:** 청구인의 주장을 받아들이는 것.
     - **기각:** 인용의 반대. 패소 느낌.
-    - **각하:** 기각보다 강력함. 청구가 잘못됨을 나타내고 판결을 거부함.
+    - **각하:** 청구가 잘못되어 판결을 거부하는 것.
     
     ### 결정 방식
     헌재에서의 결정은 다수결 혹은 합의 과정을 통해 이루어지며, 각 재판관의 의견을 종합하여 최종 판결이 내려집니다.
@@ -254,12 +253,13 @@ elif menu == "헌재":
     **[삼다수 헌재]** 의 이름 아래, 우리 반의 정의와 공정함을 지켜냅니다.
     편파판정 **절대금지**.
     """)
+    if st.button("새로고침"):
+        st.rerun()
 
 elif menu == "자율동아리":
     st.header("🎨 자율동아리")
     st.markdown("동아리 리스트입니다 왜여")
     c = conn.cursor()
-    # 동아리 추가 (관리자 기능)
     if st.session_state.logged_in and st.session_state.is_admin:
         with st.form("club_form", clear_on_submit=True):
             club_name = st.text_input("동아리명", placeholder="동아리 이름")
@@ -269,7 +269,6 @@ elif menu == "자율동아리":
                 c.execute("INSERT INTO clubs (club_name, description) VALUES (?,?)", (club_name, description))
                 conn.commit()
                 st.success("동아리 추가됨!")
-    # 동아리 목록 출력 (SQLite에서 읽기)
     c.execute("SELECT id, club_name, description FROM clubs ORDER BY id ASC")
     clubs_data = c.fetchall()
     if clubs_data:
@@ -277,7 +276,6 @@ elif menu == "자율동아리":
             cid, club_name, description = row
             st.markdown(f"### {club_name}")
             st.write(description)
-            # 동아리 가입 여부 확인
             if st.session_state.logged_in and st.session_state.username != "게스트":
                 c.execute("SELECT * FROM club_members WHERE club_id=? AND username=?", (cid, st.session_state.username))
                 is_member = c.fetchone() is not None
@@ -294,7 +292,6 @@ elif menu == "자율동아리":
             else:
                 st.info("동아리 가입/탈퇴 기능은 로그인 필수입니다.")
             
-            # 동아리 멤버 명단 출력
             c.execute("SELECT username FROM club_members WHERE club_id=?", (cid,))
             members = c.fetchall()
             if members:
@@ -303,12 +300,11 @@ elif menu == "자율동아리":
             else:
                 st.markdown("**멤버:** 없음")
             
-            # 동아리 채팅방 (Expander 사용)
-            # Auto-refresh for club chat (every 3 seconds)
-            _ = st_autorefresh(interval=3000, key=f"club_chat_{cid}")
+            # 동아리 채팅방 (Expander 사용) - 새로고침 버튼으로 실시간 업데이트를 구현
+            if st.button("채팅방 새로고침", key=f"refresh_chat_{cid}"):
+                st.rerun()
             with st.expander("동아리 채팅방"):
                 st.markdown("동아리 채팅 메시지")
-                # 동아리 채팅 입력 폼
                 with st.form(f"club_chat_form_{cid}", clear_on_submit=True):
                     club_message = st.text_input("메시지 입력", placeholder="내용 입력")
                     submitted_chat = st.form_submit_button("전송")
@@ -319,7 +315,6 @@ elif menu == "자율동아리":
                                   (cid, username, club_message, now))
                         conn.commit()
                         st.success("메시지 전송 완료")
-                # 동아리 채팅 내역 출력
                 c.execute("SELECT username, message, timestamp FROM club_chats WHERE club_id=? ORDER BY id DESC", (cid,))
                 club_chats = c.fetchall()
                 if club_chats:
@@ -330,5 +325,7 @@ elif menu == "자율동아리":
             st.markdown("---")
     else:
         st.info("등록된 동아리가 없습니다.")
+    if st.button("새로고침"):
+        st.rerun()
 
 st.markdown("***-Made By #17 양지호-***")
