@@ -120,6 +120,15 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    # 새롭게 추가된 채팅 메시지 테이블 (데이터베이스에 저장하여 유지)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nickname TEXT,
+            message TEXT,
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     return conn
 
@@ -132,8 +141,6 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.username = "게스트"
     st.session_state.role = "일반학생"  # 제작자, 관리자, 헌재, 반장, 부반장, 일반학생
-if "chat_messages" not in st.session_state:
-    st.session_state.chat_messages = []  # 일반 채팅
 
 # ---------------------------
 # 로그인 / 회원가입
@@ -249,7 +256,7 @@ if menu == "홈":
         st.rerun()
 
 # ---------------------------
-# 채팅방 페이지
+# 채팅방 페이지 (데이터베이스에 저장되는 방식으로 수정)
 # ---------------------------
 elif menu == "채팅방":
     st.header("💬 채팅방")
@@ -260,11 +267,17 @@ elif menu == "채팅방":
         submitted = st.form_submit_button("전송")
         if submitted and nickname and message:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            st.session_state.chat_messages.append((nickname, message, now))
+            c = conn.cursor()
+            c.execute("INSERT INTO chat_messages (nickname, message, timestamp) VALUES (?,?,?)", 
+                      (nickname, message, now))
+            conn.commit()
             st.success("전송 완료")
     st.markdown("### 대화 내역")
-    if st.session_state.chat_messages:
-        for nick, msg, timestamp in reversed(st.session_state.chat_messages):
+    c = conn.cursor()
+    c.execute("SELECT nickname, message, timestamp FROM chat_messages ORDER BY id DESC")
+    chat_rows = c.fetchall()
+    if chat_rows:
+        for nick, msg, timestamp in reversed(chat_rows):
             st.markdown(f"**[{timestamp}] {nick}**: {msg}")
     else:
         st.info("아직 대화 내용이 없습니다.")
@@ -341,9 +354,6 @@ elif menu == "헌재":
     - **인용:** 청구인의 주장을 채택하는 것.
     - **기각:** 청구인을 기각하는 것.
     - **각하:** 청구를 부적절하여 처리 거부하는 것.
-    
-    ### 결정 방식
-    의뢰에 대한 판결은 다수결 또는 합의로 진행되며, 상태는 '처리 안됨', '처리 중', '인용', '기각', '각하' 중 하나로 설정됩니다.
     """)
     st.markdown("<small>※ 의뢰 제출 가능 시간: 월~금 1교시 쉬는시간부터 점심시간까지</small>", unsafe_allow_html=True)
     st.markdown("---")
