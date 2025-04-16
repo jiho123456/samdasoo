@@ -28,112 +28,7 @@ conn = get_conn()
 # 2) 테이블 생성 로직 (최초 1회 실행 후 주석 처리 가능)
 # ---------------------------
 # def create_tables(conn):
-#     c = conn.cursor()
-#     # users
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS users (
-#             id SERIAL PRIMARY KEY,
-#             username TEXT UNIQUE,
-#             password TEXT,
-#             role TEXT DEFAULT '일반학생'
-#         )
-#     """)
-#     # blog_posts
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS blog_posts (
-#             id SERIAL PRIMARY KEY,
-#             title TEXT,
-#             content TEXT,
-#             timestamp TEXT,
-#             username TEXT,
-#             category TEXT DEFAULT '블로그',
-#             image_url TEXT DEFAULT ''
-#         )
-#     """)
-#     # blog_comments
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS blog_comments (
-#             id SERIAL PRIMARY KEY,
-#             post_id INTEGER,
-#             username TEXT,
-#             comment TEXT,
-#             timestamp TEXT
-#         )
-#     """)
-#     # clubs, club_members, club_chats, club_media
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS clubs (
-#             id SERIAL PRIMARY KEY,
-#             club_name TEXT,
-#             description TEXT
-#         )
-#     """)
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS club_members (
-#             id SERIAL PRIMARY KEY,
-#             club_id INTEGER,
-#             username TEXT,
-#             UNIQUE(club_id, username)
-#         )
-#     """)
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS club_chats (
-#             id SERIAL PRIMARY KEY,
-#             club_id INTEGER,
-#             username TEXT,
-#             message TEXT,
-#             timestamp TEXT
-#         )
-#     """)
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS club_media (
-#             id SERIAL PRIMARY KEY,
-#             club_id INTEGER,
-#             username TEXT,
-#             file_path TEXT,
-#             upload_time TEXT
-#         )
-#     """)
-#     # quizzes, quiz_attempts
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS quizzes (
-#             id SERIAL PRIMARY KEY,
-#             title TEXT,
-#             description TEXT,
-#             created_by TEXT,
-#             timestamp TEXT
-#         )
-#     """)
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS quiz_attempts (
-#             id SERIAL PRIMARY KEY,
-#             quiz_id INTEGER,
-#             username TEXT,
-#             score INTEGER,
-#             timestamp TEXT
-#         )
-#     """)
-#     # suggestions
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS suggestions (
-#             id SERIAL PRIMARY KEY,
-#             content TEXT,
-#             username TEXT,
-#             timestamp TEXT
-#         )
-#     """)
-#     # todos
-#     c.execute("""
-#         CREATE TABLE IF NOT EXISTS todos (
-#             id SERIAL PRIMARY KEY,
-#             content TEXT,
-#             is_done INTEGER DEFAULT 0,
-#             timestamp TEXT
-#         )
-#     """)
-#     conn.commit()
-
-# Uncomment and run once to initialize tables, then comment out:
+#     ...
 # create_tables(conn)
 
 # ---------------------------
@@ -164,7 +59,6 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 if st.form_submit_button("로그인"):
                     cur = conn.cursor()
                     if pwd in ("sqrtof4","3.141592"):
-                        # 특별 인증
                         cur.execute("SELECT 1 FROM users WHERE username=%s", (user,))
                         if cur.fetchone():
                             st.session_state.logged_in = True
@@ -214,13 +108,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
 # ---------------------------
 st.sidebar.title("메뉴 선택")
 menu_options = [
-    "홈",
-    "미니 블로그",
-    "우리 반 명단",
-    "퀴즈",
-    "건의함",
-    "자율동아리",
-    "해야할일"
+    "홈","미니 블로그","우리 반 명단","퀴즈","건의함","자율동아리","해야할일"
 ]
 if st.session_state.role in ["제작자","반장","부반장"]:
     menu_options.append("운영진 페이지")
@@ -377,7 +265,6 @@ elif menu == "자율동아리":
     cur.execute("SELECT id,club_name,description FROM clubs ORDER BY id")
     for cid, nm, ds in cur.fetchall():
         st.markdown(f"### {nm}\n{ds}")
-        # 가입/탈퇴
         cur.execute("SELECT 1 FROM club_members WHERE club_id=%s AND username=%s",(cid,st.session_state.username))
         joined = cur.fetchone()
         if st.session_state.logged_in and st.session_state.username!="게스트":
@@ -389,11 +276,9 @@ elif menu == "자율동아리":
                 if st.button(f"탈퇴({nm})", key=f"l_{cid}"):
                     cur.execute("DELETE FROM club_members WHERE club_id=%s AND username=%s",(cid,st.session_state.username))
                     conn.commit(); st.success("탈퇴 완료"); st.rerun()
-        # 멤버 리스트
         cur.execute("SELECT username FROM club_members WHERE club_id=%s",(cid,))
         mems = [r[0] for r in cur.fetchall()]
         st.write("멤버:",", ".join(mems) if mems else "없음")
-        # 채팅
         with st.expander("채팅방"):
             cur.execute("SELECT username,message,timestamp FROM club_chats WHERE club_id=%s ORDER BY id",(cid,))
             for u,m,tm in cur.fetchall():
@@ -405,7 +290,6 @@ elif menu == "자율동아리":
                     cur.execute("INSERT INTO club_chats(club_id,username,message,timestamp) VALUES(%s,%s,%s,%s)",
                                 (cid,st.session_state.username,msg,now))
                     conn.commit(); st.success("전송 완료"); st.rerun()
-        # 미디어
         with st.expander("미디어 업로드/보기"):
             up = st.file_uploader("파일", key=f"up_{cid}")
             if st.button("업로드", key=f"btn_{cid}") and up:
@@ -455,7 +339,10 @@ elif menu == "운영진 페이지":
     st.header("🔧 운영진 페이지")
     if st.session_state.role not in ["제작자","반장","부반장"]:
         st.error("권한이 없습니다."); st.stop()
+
     cur = conn.cursor()
+
+    # 1) 유저 관리
     st.subheader("👤 유저 관리")
     cur.execute("SELECT id,username,role FROM users ORDER BY id")
     for uid,un,ur in cur.fetchall():
@@ -467,16 +354,54 @@ elif menu == "운영진 페이지":
             nr=col2.selectbox("",roles,index=idx,key=f"r_{uid}")
             if col2.button("변경",key=f"chg_{uid}"):
                 cur.execute("UPDATE users SET role=%s WHERE id=%s",(nr,uid))
-                conn.commit(); st.success("변경 완료"); st.rerun()
+                conn.commit(); st.success("변경 완료"); st.experimental_rerun()
         st.markdown("---")
+
+    # 2) 게시글 모더레이션 (삭제 + 수정)
     st.subheader("📝 게시글 모더레이션")
     cur.execute("SELECT id,title,username,timestamp FROM blog_posts ORDER BY id DESC")
     for pid,pt,pu,tm in cur.fetchall():
-        c1,c2 = st.columns([0.8,0.2])
-        c1.write(f"[ID {pid}] **{pt}** by {pu} ({tm})")
-        if c2.button("삭제",key=f"delp_{pid}"):
+        st.write(f"- [ID {pid}] **{pt}** by {pu} ({tm})")
+        col1, col2 = st.columns([0.7,0.3])
+        if col2.button("삭제",key=f"delp_{pid}"):
             cur.execute("DELETE FROM blog_posts WHERE id=%s",(pid,))
-            conn.commit(); st.success("삭제 완료"); st.rerun()
+            conn.commit(); st.success("삭제 완료"); st.experimental_rerun()
+        if col2.button("수정",key=f"editp_{pid}"):
+            post_cur = conn.cursor()
+            post_cur.execute("SELECT title,content,category FROM blog_posts WHERE id=%s",(pid,))
+            old_t,old_c,old_cat = post_cur.fetchone()
+            with st.form(f"edit_form_{pid}",clear_on_submit=True):
+                nt = st.text_input("제목", value=old_t, key=f"nt_{pid}")
+                nc = st.text_area("내용", value=old_c, key=f"nc_{pid}")
+                ncat = st.selectbox("카테고리",["블로그","자랑하기"], index=0 if old_cat=="블로그" else 1, key=f"ncat_{pid}")
+                if st.form_submit_button("저장"):
+                    cur.execute(
+                        "UPDATE blog_posts SET title=%s,content=%s,category=%s WHERE id=%s",
+                        (nt,nc,ncat,pid)
+                    )
+                    conn.commit(); st.success("수정 완료"); st.experimental_rerun()
+        st.markdown("---")
+
+    # 3) 동아리 관리 (삭제 + 수정)
+    st.subheader("🏢 동아리 관리")
+    cur.execute("SELECT id,club_name,description FROM clubs ORDER BY id")
+    for cid,cn,cd in cur.fetchall():
+        st.write(f"• [ID {cid}] **{cn}**")
+        col1, col2 = st.columns([0.7,0.3])
+        if col2.button("삭제", key=f"delc_{cid}"):
+            cur.execute("DELETE FROM clubs WHERE id=%s",(cid,))
+            conn.commit(); st.success("동아리 삭제 완료"); st.experimental_rerun()
+        if col2.button("수정", key=f"editc_{cid}"):
+            with st.form(f"club_form_{cid}", clear_on_submit=True):
+                new_name = st.text_input("동아리명", value=cn, key=f"cn_{cid}")
+                new_desc = st.text_area("설명", value=cd, key=f"cd_{cid}")
+                if st.form_submit_button("저장"):
+                    cur.execute(
+                        "UPDATE clubs SET club_name=%s,description=%s WHERE id=%s",
+                        (new_name,new_desc,cid)
+                    )
+                    conn.commit(); st.success("수정 완료"); st.experimental_rerun()
+        st.markdown("---")
 
 # ---------------------------
 # 8) 푸터
