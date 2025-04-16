@@ -5,12 +5,14 @@ import psycopg2
 from datetime import datetime
 import pandas as pd
 
-# Get the DB URL from Streamlit secrets
+# Get the DB_URL from secrets (ensure your connection string includes sslmode if needed)
 DB_URL = st.secrets["DB_URL"]
 
 def init_db():
-    # Connect via psycopg2 using the Supabase connection string
+    # Connect to Supabase PostgreSQL using psycopg2
     conn = psycopg2.connect(DB_URL)
+    # Optionally, you could set autocommit to False and commit manually:
+    # conn.autocommit = False
     c = conn.cursor()
 
     # 1) users table
@@ -38,7 +40,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # 3) blog_comments: 블로그/자랑하기 댓글
+    # 3) blog_comments: 댓글 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS blog_comments (
             id SERIAL PRIMARY KEY,
@@ -50,7 +52,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # 4) clubs: 자율 동아리 tables
+    # 4) clubs and related tables
     c.execute('''
         CREATE TABLE IF NOT EXISTS clubs (
             id SERIAL PRIMARY KEY,
@@ -77,7 +79,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # club_media: 동아리에 업로드한 파일 (이미지/동영상 등)
+    # club_media: 동아리 미디어 (이미지/동영상 등)
     c.execute('''
         CREATE TABLE IF NOT EXISTS club_media (
             id SERIAL PRIMARY KEY,
@@ -89,7 +91,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # 5) quizzes: 퀴즈
+    # 5) quizzes and quiz_attempts tables
     c.execute('''
         CREATE TABLE IF NOT EXISTS quizzes (
             id SERIAL PRIMARY KEY,
@@ -166,8 +168,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 submitted = st.form_submit_button("로그인")
                 if submitted:
                     c = conn.cursor()
-                    # 특수 비밀번호를 통한 역할 인증 (예시)
-                    if password == "sqrtof4":  # 제작자
+                    if password == "sqrtof4":  # 제작자 인증
                         c.execute("SELECT * FROM users WHERE username=%s", (username,))
                         user = c.fetchone()
                         if user:
@@ -178,7 +179,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.rerun()
                         else:
                             st.error("등록된 사용자가 아닙니다.")
-                    elif password == "3.141592":  # 관리자
+                    elif password == "3.141592":  # 관리자 인증
                         c.execute("SELECT * FROM users WHERE username=%s", (username,))
                         user = c.fetchone()
                         if user:
@@ -226,7 +227,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 st.rerun()
 
 # ---------------------------
-# 사이드바 메뉴
+# Sidebar Menu
 # ---------------------------
 st.sidebar.title("메뉴 선택")
 menu_options = [
@@ -251,7 +252,7 @@ with st.container():
     st.markdown("""#### 안녕하세요? 제작자인 양지호입니다.
 왼쪽 탭에서 원하는 메뉴를 선택하세요.
 (하단의 '새로고침' 버튼을 누르면 최신 내용이 반영됩니다.)
-(데이터는 Supabase에 있는 PostgreSQL DB에 저장되어 영구적으로 유지됩니다.)
+###### 공지: 서버 데이터베이스 이전 완료되었습니다. 이제 서버가 정상작동 할 것입니다.(아마도)
 """)
 
 # ---------------------------
