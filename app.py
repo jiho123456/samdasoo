@@ -134,7 +134,7 @@ def create_tables(conn):
     conn.commit()
 
 # Uncomment and run once to initialize tables, then comment out:
-#create_tables(conn)
+create_tables(conn)
 
 # ---------------------------
 # 3) 세션 상태 초기화
