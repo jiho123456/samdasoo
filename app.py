@@ -77,7 +77,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # [새로 추가] club_media: 동아리에 업로드한 파일(이미지/동영상 등)
+    # club_media: 동아리에 업로드한 파일(이미지/동영상 등)
     c.execute('''
         CREATE TABLE IF NOT EXISTS club_media (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,7 +121,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # [새로 추가] todos: 해야할일
+    # todos: 해야할일
     c.execute('''
         CREATE TABLE IF NOT EXISTS todos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,8 +176,8 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 submitted = st.form_submit_button("로그인")
                 if submitted:
                     c = conn.cursor()
-                    # 특수 비밀번호를 통한 역할 인증
-                    if password == "sqrtof4":  # 제작자 비밀번호 예시
+                    # 특수 비밀번호를 통한 역할 인증(예시)
+                    if password == "sqrtof4":  # 제작자
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
                         if user:
@@ -188,7 +188,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.rerun()
                         else:
                             st.error("등록된 사용자가 아닙니다.")
-                    elif password == "3.141592":  # 관리자 비밀번호 예시
+                    elif password == "3.141592":  # 관리자
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
                         if user:
@@ -200,11 +200,13 @@ with st.sidebar.expander("로그인 / 회원가입"):
                         else:
                             st.error("등록된 사용자가 아닙니다.")
                     else:
+                        # 일반 유저 로그인
                         c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
                         user = c.fetchone()
                         if user:
                             st.session_state.logged_in = True
                             st.session_state.username = user[1]
+                            # role이 있으면 인덱스 3번
                             st.session_state.role = user[3] if len(user) >= 4 else "일반학생"
                             st.success(f"{username}님, 환영합니다! (역할: {st.session_state.role})")
                             st.rerun()
@@ -240,13 +242,14 @@ with st.sidebar.expander("로그인 / 회원가입"):
 # ---------------------------
 st.sidebar.title("메뉴 선택")
 menu = st.sidebar.radio("페이지 이동", [
-    "홈", 
-    "미니 블로그", 
-    "우리 반 명단", 
-    "퀴즈", 
+    "홈",
+    "미니 블로그",
+    "우리 반 명단",
+    "퀴즈",
     "건의함",
     "자율동아리",
-    "해야할일"
+    "해야할일",
+    "운영진 페이지"  # 새로 추가
 ])
 
 # ---------------------------
@@ -257,7 +260,10 @@ with st.container():
     st.title("🌊 5-9 삼다수반")
     st.markdown("""#### 안녕하세요? 제작자인 양지호입니다.
 왼쪽 탭에서 원하는 메뉴를 선택하세요.
-(하단의 '새로고침' 버튼을 누르면 최신 내용이 반영됩니다.)""")
+(하단의 '새로고침' 버튼을 누르면 최신 내용이 반영됩니다.)
+(왠만하면 회원가입할때 자기 이름으로 하시고, 데이터베이스를 4월 16일에 초기화해서 이날 전에 가입하신 분들은 다시 가입해주세요)
+(참고로 역할 같은 것도 없앴다지만, 필요한 권한 체크는 여기서 합니다)
+""")
 
 # ---------------------------
 # 홈 페이지
@@ -284,7 +290,7 @@ elif menu == "미니 블로그":
         title = st.text_input("글 제목", placeholder="제목 입력")
         content = st.text_area("글 내용", placeholder="내용 입력")
         category = st.selectbox("카테고리", ["블로그", "자랑하기"])
-        
+
         # 이미지 파일 업로드 (자랑하기 시 주로 사용)
         uploaded_file = st.file_uploader("이미지 파일 업로드 (선택)", type=["png", "jpg", "jpeg", "gif"])
         submitted = st.form_submit_button("게시하기")
@@ -296,7 +302,7 @@ elif menu == "미니 블로그":
                 # uploads 폴더 없으면 생성
                 if not os.path.exists("uploads"):
                     os.makedirs("uploads")
-                
+
                 ext = uploaded_file.name.split('.')[-1]
                 unique_filename = f"{uuid.uuid4().hex}.{ext}"
                 save_path = os.path.join("uploads", unique_filename)
@@ -564,7 +570,7 @@ elif menu == "자율동아리":
                 else:
                     st.info("채팅 메시지가 없습니다.")
 
-            # [새 기능] 동아리 미디어 업로드 (이미지/영상 등)
+            # 동아리 미디어 업로드 (이미지/영상 등)
             with st.expander("동아리 미디어 업로드 / 보기"):
                 st.markdown(f"**{club_name}** 미디어 업로드")
                 uploaded_media = st.file_uploader("파일 업로드 (이미지, 동영상, 오디오, 문서 등)", key=f"media_uploader_{cid}", 
@@ -603,7 +609,6 @@ elif menu == "자율동아리":
                 if media_rows:
                     for mid, muser, mpath, mtime in media_rows:
                         st.write(f"[{mid}] 업로드: {muser} / {mtime}")
-                        # 파일 확장자로 타입 판별
                         file_ext = mpath.split('.')[-1].lower()
                         if file_ext in ["png", "jpg", "jpeg", "gif"]:
                             st.image(mpath)
@@ -626,14 +631,13 @@ elif menu == "자율동아리":
         st.rerun()
 
 # ---------------------------
-# [새 페이지] 해야할일 (ToDo)
+# 해야할일 (ToDo)
 # ---------------------------
 elif menu == "해야할일":
     st.header("📝 해야할일 (ToDo)")
     st.markdown("오늘 학교숙제 뭐였지? 나 학교 안 와서 모르는데... 할 때 있죠? 그럴 땐 여기서 확인하세요!")
 
     c = conn.cursor()
-
     # 새 할일 추가
     with st.form("todo_form", clear_on_submit=True):
         todo_content = st.text_input("할 일 내용", placeholder="예: 영어 숙제하기")
@@ -671,7 +675,6 @@ elif menu == "해야할일":
                     st.experimental_rerun()
 
             with col2:
-                # 내용 + 날짜
                 done_str = "~~" if is_done else ""
                 st.markdown(f"{done_str}{content}{done_str}  \n*({ttime})*")
 
@@ -688,6 +691,66 @@ elif menu == "해야할일":
 
     if st.button("새로고침"):
         st.rerun()
+
+# ---------------------------
+# [새 페이지] 운영진 페이지 (Moderator Page)
+# ---------------------------
+elif menu == "운영진 페이지":
+    st.header("🔧 운영진 페이지 (Moderator Page)")
+
+    # 접근 권한 확인
+    # 운영진: "제작자", "반장", "부반장"만 들어올 수 있음
+    if st.session_state.role not in ["제작자", "반장", "부반장"]:
+        st.error("이 페이지에 접근할 권한이 없습니다.")
+        st.stop()
+
+    st.markdown("여기는 **반장, 부반장, 제작자** 전용 페이지입니다.")
+
+    # 1) 유저 관리 (역할 변경)은 오직 "제작자"만 가능
+    st.subheader("👤 유저 관리")
+    c = conn.cursor()
+    c.execute("SELECT id, username, role FROM users ORDER BY id ASC")
+    user_list = c.fetchall()
+    for user_id, uname, urole in user_list:
+        st.write(f"**{uname}** (현재 역할: {urole})")
+
+        # 역할 변경은 "제작자"만 가능
+        if st.session_state.role == "제작자":
+            roles = ["제작자", "관리자", "반장", "부반장", "일반학생"]
+            # 현재 역할이 위 리스트에 있으면 해당 인덱스로, 없으면 기본 '일반학생' 인덱스로
+            current_index = roles.index(urole) if urole in roles else roles.index("일반학생")
+            new_role = st.selectbox(
+                f"역할 변경 ({uname})",
+                roles,
+                index=current_index,
+                key=f"role_select_{user_id}"
+            )
+            if st.button(f"역할 업데이트 ({uname})", key=f"update_role_{user_id}"):
+                c.execute("UPDATE users SET role=? WHERE id=?", (new_role, user_id))
+                conn.commit()
+                st.success(f"{uname}님의 역할이 **{new_role}**(으)로 변경되었습니다.")
+                st.rerun()
+        else:
+            # 반장/부반장은 보기만 가능
+            st.info("※ 역할 변경 권한은 '제작자'에게만 있습니다.")
+
+        st.markdown("---")
+
+    # 2) 게시글 모더레이션 (반장, 부반장, 제작자 모두 가능)
+    st.subheader("📝 게시글 모더레이션")
+    c.execute("SELECT id, title, username, timestamp FROM blog_posts ORDER BY id DESC")
+    all_posts = c.fetchall()
+    if all_posts:
+        for pid, ptitle, puser, pts in all_posts:
+            st.write(f"- [ID {pid}] **{ptitle}** | 작성자: {puser} | 작성일: {pts}")
+            # 삭제 버튼
+            if st.button(f"게시글 삭제 (ID {pid})", key=f"mod_delete_{pid}"):
+                c.execute("DELETE FROM blog_posts WHERE id=?", (pid,))
+                conn.commit()
+                st.success("게시글을 삭제했습니다.")
+                st.rerun()
+    else:
+        st.info("등록된 게시글이 없습니다.")
 
 # ---------------------------
 # 하단 제작자 표시
