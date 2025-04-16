@@ -164,7 +164,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.rerun()
                         else:
                             st.error("등록된 사용자가 아닙니다.")
-                    elif password == "3.141592":  # 관리자 비밀번호 예시
+                    elif password == "THEREISNOMANAGER":  # 관리자 비밀번호 예시
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
                         if user:
