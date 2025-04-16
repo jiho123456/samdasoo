@@ -6,7 +6,6 @@ from datetime import datetime
 import pandas as pd
 
 def init_db():
-
     USER = st.secrets["user"]
     PASSWORD = st.secrets["password"]
     HOST = st.secrets["host"]
