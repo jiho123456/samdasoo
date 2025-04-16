@@ -5,15 +5,31 @@ import psycopg2
 from datetime import datetime
 import pandas as pd
 
-# Get the DB_URL from secrets (ensure your connection string includes sslmode if needed)
-DB_URL = st.secrets["DB_URL"]
-
 def init_db():
-    # Connect to Supabase PostgreSQL using psycopg2
-    conn = psycopg2.connect(DB_URL)
-    # Optionally, you could set autocommit to False and commit manually:
-    # conn.autocommit = False
-    c = conn.cursor()
+
+    USER = st.secrets["user"]
+    PASSWORD = st.secrets["password"]
+    HOST = st.secrets["host"]
+    PORT = st.secrets["port"]
+    DBNAME = st.secrets["dbname"]
+
+    # Connect to the database
+    try:
+        conn = psycopg2.connect(
+            user=USER,
+            password=PASSWORD,
+            host=HOST,
+            port=PORT,
+            dbname=DBNAME
+        )
+        
+        # Create a cursor to execute SQL queries
+        c = conn.cursor()
+
+    except Exception as e:
+        st.error("서버 데이터베이스 문제임 이거 보면 제작자한테 말하셈")
+        st.error(e)
+
 
     # 1) users table
     c.execute('''
