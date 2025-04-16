@@ -154,7 +154,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
             st.session_state.logged_in = False
             st.session_state.username = "게스트"
             st.session_state.role = "일반학생"
-            st.experimental_rerun()
+            st.rerun()
     else:
         choice = st.radio("옵션 선택", ["로그인", "회원가입", "게스트 로그인"], key="login_choice")
         if choice == "로그인":
@@ -170,7 +170,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.session_state.logged_in = True
                             st.session_state.username = user
                             st.session_state.role = "제작자" if pwd=="sqrtof4" else "관리자"
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("등록된 사용자가 아닙니다.")
                     else:
@@ -183,7 +183,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.session_state.logged_in = True
                             st.session_state.username = row[0]
                             st.session_state.role = row[1]
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("아이디 또는 비밀번호가 틀렸습니다.")
         elif choice == "회원가입":
@@ -199,7 +199,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                         )
                         conn.commit()
                         st.success("회원가입 성공! 로그인 해주세요.")
-                        st.experimental_rerun()
+                        st.rerun()
                     except psycopg2.IntegrityError:
                         st.error("이미 존재하는 아이디입니다.")
         else:
@@ -207,7 +207,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 st.session_state.logged_in = True
                 st.session_state.username = "게스트"
                 st.session_state.role = "일반학생"
-                st.experimental_rerun()
+                st.rerun()
 
 # ---------------------------
 # 5) 사이드바 메뉴
@@ -243,7 +243,7 @@ if menu == "홈":
     mood = st.selectbox("오늘의 기분은?", ["😄 굿굿!", "😎 OK", "😴 졸림", "🥳 신남"])
     st.write(f"오늘의 기분: {mood}")
     if st.button("새로고침"):
-        st.experimental_rerun()
+        st.rerun()
 
 elif menu == "미니 블로그":
     st.header("📘 미니 블로그 / 자랑하기")
@@ -268,7 +268,7 @@ elif menu == "미니 블로그":
             )
             conn.commit()
             st.success("게시글 등록 완료")
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("### 최신 게시글")
     cur = conn.cursor()
@@ -293,7 +293,7 @@ elif menu == "미니 블로그":
                     )
                     conn.commit()
                     st.success("댓글 등록 완료")
-                    st.experimental_rerun()
+                    st.rerun()
         st.markdown("---")
 
 elif menu == "우리 반 명단":
@@ -309,7 +309,7 @@ elif menu == "우리 반 명단":
     df = pd.DataFrame(data)
     st.table(df)
     if st.button("새로고침"):
-        st.experimental_rerun()
+        st.rerun()
 
 elif menu == "퀴즈":
     if not st.session_state.logged_in or st.session_state.username=="게스트":
@@ -328,7 +328,7 @@ elif menu == "퀴즈":
                 )
                 conn.commit()
                 st.success("퀴즈 등록 완료")
-                st.experimental_rerun()
+                st.rerun()
 
         st.markdown("### 등록된 퀴즈")
         cur = conn.cursor()
@@ -353,7 +353,7 @@ elif menu == "건의함":
             )
             conn.commit()
             st.success("제출 완료")
-            st.experimental_rerun()
+            st.rerun()
 
     st.markdown("### 최신 건의")
     cur = conn.cursor()
@@ -373,7 +373,7 @@ elif menu == "자율동아리":
                 cur.execute("INSERT INTO clubs(club_name,description) VALUES(%s,%s)",(cn,cd))
                 conn.commit()
                 st.success("추가 완료")
-                st.experimental_rerun()
+                st.rerun()
     cur.execute("SELECT id,club_name,description FROM clubs ORDER BY id")
     for cid, nm, ds in cur.fetchall():
         st.markdown(f"### {nm}\n{ds}")
@@ -384,11 +384,11 @@ elif menu == "자율동아리":
             if not joined:
                 if st.button(f"가입({nm})", key=f"j_{cid}"):
                     cur.execute("INSERT INTO club_members(club_id,username) VALUES(%s,%s)",(cid,st.session_state.username))
-                    conn.commit(); st.success("가입 완료"); st.experimental_rerun()
+                    conn.commit(); st.success("가입 완료"); st.rerun()
             else:
                 if st.button(f"탈퇴({nm})", key=f"l_{cid}"):
                     cur.execute("DELETE FROM club_members WHERE club_id=%s AND username=%s",(cid,st.session_state.username))
-                    conn.commit(); st.success("탈퇴 완료"); st.experimental_rerun()
+                    conn.commit(); st.success("탈퇴 완료"); st.rerun()
         # 멤버 리스트
         cur.execute("SELECT username FROM club_members WHERE club_id=%s",(cid,))
         mems = [r[0] for r in cur.fetchall()]
@@ -404,7 +404,7 @@ elif menu == "자율동아리":
                     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     cur.execute("INSERT INTO club_chats(club_id,username,message,timestamp) VALUES(%s,%s,%s,%s)",
                                 (cid,st.session_state.username,msg,now))
-                    conn.commit(); st.success("전송 완료"); st.experimental_rerun()
+                    conn.commit(); st.success("전송 완료"); st.rerun()
         # 미디어
         with st.expander("미디어 업로드/보기"):
             up = st.file_uploader("파일", key=f"up_{cid}")
@@ -415,7 +415,7 @@ elif menu == "자율동아리":
                 now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 cur.execute("INSERT INTO club_media(club_id,username,file_path,upload_time) VALUES(%s,%s,%s,%s)",
                             (cid,st.session_state.username,fn,now))
-                conn.commit(); st.success("업로드 완료"); st.experimental_rerun()
+                conn.commit(); st.success("업로드 완료"); st.rerun()
             cur.execute("SELECT username,file_path,upload_time FROM club_media WHERE club_id=%s ORDER BY id DESC",(cid,))
             for u,fp,tm in cur.fetchall():
                 st.write(f"{tm} by {u}")
@@ -434,7 +434,7 @@ elif menu == "해야할일":
         if st.form_submit_button("추가") and td:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             cur.execute("INSERT INTO todos(content,is_done,timestamp) VALUES(%s,0,%s)",(td,now))
-            conn.commit(); st.success("추가 완료"); st.experimental_rerun()
+            conn.commit(); st.success("추가 완료"); st.rerun()
     cur.execute("SELECT id,content,is_done,timestamp FROM todos ORDER BY id DESC")
     for tid,co,done,tm in cur.fetchall():
         c1,c2,c3 = st.columns([0.05,0.8,0.15])
@@ -442,13 +442,13 @@ elif menu == "해야할일":
             chk = st.checkbox("",value=bool(done),key=f"td_{tid}")
             if chk != bool(done):
                 cur.execute("UPDATE todos SET is_done=%s WHERE id=%s",(1 if chk else 0,tid))
-                conn.commit(); st.experimental_rerun()
+                conn.commit(); st.rerun()
         with c2:
             st.markdown(f"{'~~'+co+'~~' if done else co}  \n*({tm})*")
         with c3:
             if st.button("삭제",key=f"tdel_{tid}"):
                 cur.execute("DELETE FROM todos WHERE id=%s",(tid,))
-                conn.commit(); st.success("삭제 완료"); st.experimental_rerun()
+                conn.commit(); st.success("삭제 완료"); st.rerun()
         st.markdown("---")
 
 elif menu == "운영진 페이지":
@@ -467,7 +467,7 @@ elif menu == "운영진 페이지":
             nr=col2.selectbox("",roles,index=idx,key=f"r_{uid}")
             if col2.button("변경",key=f"chg_{uid}"):
                 cur.execute("UPDATE users SET role=%s WHERE id=%s",(nr,uid))
-                conn.commit(); st.success("변경 완료"); st.experimental_rerun()
+                conn.commit(); st.success("변경 완료"); st.rerun()
         st.markdown("---")
     st.subheader("📝 게시글 모더레이션")
     cur.execute("SELECT id,title,username,timestamp FROM blog_posts ORDER BY id DESC")
@@ -476,7 +476,7 @@ elif menu == "운영진 페이지":
         c1.write(f"[ID {pid}] **{pt}** by {pu} ({tm})")
         if c2.button("삭제",key=f"delp_{pid}"):
             cur.execute("DELETE FROM blog_posts WHERE id=%s",(pid,))
-            conn.commit(); st.success("삭제 완료"); st.experimental_rerun()
+            conn.commit(); st.success("삭제 완료"); st.rerun()
 
 # ---------------------------
 # 8) 푸터
