@@ -27,114 +27,114 @@ conn = get_conn()
 # ---------------------------
 # 2) 테이블 생성 로직 (최초 1회 실행 후 주석 처리 가능)
 # ---------------------------
-def create_tables(conn):
-    c = conn.cursor()
-    # users
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE,
-            password TEXT,
-            role TEXT DEFAULT '일반학생'
-        )
-    """)
-    # blog_posts
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS blog_posts (
-            id SERIAL PRIMARY KEY,
-            title TEXT,
-            content TEXT,
-            timestamp TEXT,
-            username TEXT,
-            category TEXT DEFAULT '블로그',
-            image_url TEXT DEFAULT ''
-        )
-    """)
-    # blog_comments
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS blog_comments (
-            id SERIAL PRIMARY KEY,
-            post_id INTEGER,
-            username TEXT,
-            comment TEXT,
-            timestamp TEXT
-        )
-    """)
-    # clubs, club_members, club_chats, club_media
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS clubs (
-            id SERIAL PRIMARY KEY,
-            club_name TEXT,
-            description TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS club_members (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            UNIQUE(club_id, username)
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS club_chats (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            message TEXT,
-            timestamp TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS club_media (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            file_path TEXT,
-            upload_time TEXT
-        )
-    """)
-    # quizzes, quiz_attempts
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS quizzes (
-            id SERIAL PRIMARY KEY,
-            title TEXT,
-            description TEXT,
-            created_by TEXT,
-            timestamp TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS quiz_attempts (
-            id SERIAL PRIMARY KEY,
-            quiz_id INTEGER,
-            username TEXT,
-            score INTEGER,
-            timestamp TEXT
-        )
-    """)
-    # suggestions
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS suggestions (
-            id SERIAL PRIMARY KEY,
-            content TEXT,
-            username TEXT,
-            timestamp TEXT
-        )
-    """)
-    # todos
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS todos (
-            id SERIAL PRIMARY KEY,
-            content TEXT,
-            is_done INTEGER DEFAULT 0,
-            timestamp TEXT
-        )
-    """)
-    conn.commit()
+# def create_tables(conn):
+#     c = conn.cursor()
+#     # users
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS users (
+#             id SERIAL PRIMARY KEY,
+#             username TEXT UNIQUE,
+#             password TEXT,
+#             role TEXT DEFAULT '일반학생'
+#         )
+#     """)
+#     # blog_posts
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS blog_posts (
+#             id SERIAL PRIMARY KEY,
+#             title TEXT,
+#             content TEXT,
+#             timestamp TEXT,
+#             username TEXT,
+#             category TEXT DEFAULT '블로그',
+#             image_url TEXT DEFAULT ''
+#         )
+#     """)
+#     # blog_comments
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS blog_comments (
+#             id SERIAL PRIMARY KEY,
+#             post_id INTEGER,
+#             username TEXT,
+#             comment TEXT,
+#             timestamp TEXT
+#         )
+#     """)
+#     # clubs, club_members, club_chats, club_media
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS clubs (
+#             id SERIAL PRIMARY KEY,
+#             club_name TEXT,
+#             description TEXT
+#         )
+#     """)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS club_members (
+#             id SERIAL PRIMARY KEY,
+#             club_id INTEGER,
+#             username TEXT,
+#             UNIQUE(club_id, username)
+#         )
+#     """)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS club_chats (
+#             id SERIAL PRIMARY KEY,
+#             club_id INTEGER,
+#             username TEXT,
+#             message TEXT,
+#             timestamp TEXT
+#         )
+#     """)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS club_media (
+#             id SERIAL PRIMARY KEY,
+#             club_id INTEGER,
+#             username TEXT,
+#             file_path TEXT,
+#             upload_time TEXT
+#         )
+#     """)
+#     # quizzes, quiz_attempts
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS quizzes (
+#             id SERIAL PRIMARY KEY,
+#             title TEXT,
+#             description TEXT,
+#             created_by TEXT,
+#             timestamp TEXT
+#         )
+#     """)
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS quiz_attempts (
+#             id SERIAL PRIMARY KEY,
+#             quiz_id INTEGER,
+#             username TEXT,
+#             score INTEGER,
+#             timestamp TEXT
+#         )
+#     """)
+#     # suggestions
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS suggestions (
+#             id SERIAL PRIMARY KEY,
+#             content TEXT,
+#             username TEXT,
+#             timestamp TEXT
+#         )
+#     """)
+#     # todos
+#     c.execute("""
+#         CREATE TABLE IF NOT EXISTS todos (
+#             id SERIAL PRIMARY KEY,
+#             content TEXT,
+#             is_done INTEGER DEFAULT 0,
+#             timestamp TEXT
+#         )
+#     """)
+#     conn.commit()
 
 # Uncomment and run once to initialize tables, then comment out:
-create_tables(conn)
+# create_tables(conn)
 
 # ---------------------------
 # 3) 세션 상태 초기화
