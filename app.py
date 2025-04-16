@@ -1,3 +1,5 @@
+import os
+import uuid
 import streamlit as st
 import sqlite3
 from datetime import datetime
@@ -8,22 +10,21 @@ DB_FILE = 'samdasu.db'
 def init_db():
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     c = conn.cursor()
-    
-    # 1) users 테이블 생성 (기존에 없으면 생성)
+
+    # 1) users 테이블
     c.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             password TEXT
-            -- 여기서는 일단 role 컬럼을 만들지 않고, 아래 ensure_role_column 함수에서 처리
         )
     ''')
     conn.commit()
-    
-    # 1-1) users 테이블에 role 컬럼이 없으면 추가 (이미 DB가 있다면 ALTER TABLE)
+
+    # users 테이블에 role 컬럼 없는 경우 추가
     ensure_role_column(conn)
 
-    # 2) 미니 블로그(자랑하기 통합) 테이블
+    # 2) blog_posts: 미니 블로그 & 자랑하기 통합
     c.execute('''
         CREATE TABLE IF NOT EXISTS blog_posts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +38,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # 3) 블로그 댓글 테이블
+    # 3) blog_comments: 블로그/자랑하기 댓글
     c.execute('''
         CREATE TABLE IF NOT EXISTS blog_comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,7 +50,7 @@ def init_db():
     ''')
     conn.commit()
 
-    # 4) 자율 동아리 테이블
+    # 4) clubs: 자율 동아리
     c.execute('''
         CREATE TABLE IF NOT EXISTS clubs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +77,19 @@ def init_db():
     ''')
     conn.commit()
 
-    # 5) 퀴즈 테이블
+    # [새로 추가] club_media: 동아리에 업로드한 파일(이미지/동영상 등)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS club_media (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            club_id INTEGER,
+            username TEXT,
+            file_path TEXT,
+            upload_time TEXT
+        )
+    ''')
+    conn.commit()
+
+    # 5) quizzes: 퀴즈
     c.execute('''
         CREATE TABLE IF NOT EXISTS quizzes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,12 +110,23 @@ def init_db():
     ''')
     conn.commit()
 
-    # 6) 건의함 테이블
+    # 6) suggestions: 건의함
     c.execute('''
         CREATE TABLE IF NOT EXISTS suggestions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             content TEXT,
             username TEXT,
+            timestamp TEXT
+        )
+    ''')
+    conn.commit()
+
+    # [새로 추가] todos: 해야할일
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT,
+            is_done INTEGER DEFAULT 0, 
             timestamp TEXT
         )
     ''')
@@ -115,7 +139,7 @@ def ensure_role_column(conn):
     c = conn.cursor()
     c.execute('PRAGMA table_info(users)')
     columns = c.fetchall()
-    col_names = [col[1] for col in columns]  # (cid, name, type, notnull, dflt_value, pk) 구조
+    col_names = [col[1] for col in columns]  # (cid, name, type, notnull, dflt_value, pk)
     if 'role' not in col_names:
         c.execute("ALTER TABLE users ADD COLUMN role TEXT DEFAULT '일반학생'")
         conn.commit()
@@ -164,7 +188,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                             st.rerun()
                         else:
                             st.error("등록된 사용자가 아닙니다.")
-                    elif password == "THEREISNOMANAGER":  # 관리자 비밀번호 예시
+                    elif password == "3.141592":  # 관리자 비밀번호 예시
                         c.execute("SELECT * FROM users WHERE username=?", (username,))
                         user = c.fetchone()
                         if user:
@@ -179,10 +203,8 @@ with st.sidebar.expander("로그인 / 회원가입"):
                         c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
                         user = c.fetchone()
                         if user:
-                            # user 구조: (id, username, password, role)
                             st.session_state.logged_in = True
                             st.session_state.username = user[1]
-                            # 혹은 user[3]로 role 인덱싱
                             st.session_state.role = user[3] if len(user) >= 4 else "일반학생"
                             st.success(f"{username}님, 환영합니다! (역할: {st.session_state.role})")
                             st.rerun()
@@ -214,7 +236,7 @@ with st.sidebar.expander("로그인 / 회원가입"):
                 st.rerun()
 
 # ---------------------------
-# 사이드바 메뉴 (헌재, 채팅 삭제됨)
+# 사이드바 메뉴
 # ---------------------------
 st.sidebar.title("메뉴 선택")
 menu = st.sidebar.radio("페이지 이동", [
@@ -223,7 +245,8 @@ menu = st.sidebar.radio("페이지 이동", [
     "우리 반 명단", 
     "퀴즈", 
     "건의함",
-    "자율동아리"
+    "자율동아리",
+    "해야할일"
 ])
 
 # ---------------------------
@@ -243,9 +266,9 @@ if menu == "홈":
     st.header("🏠 홈")
     st.markdown("""
     **삼다수반** 웹사이트입니다.  
-    이 웹사이트는 블로그, 동아리, 건의 등 다양한 기능을 통해 **즐겁게 생활**하는 것을 돕습니다.
+    이 웹사이트는 블로그, 동아리, 건의함, 퀴즈, 해야할일 등으로 **즐겁게 생활**을 돕습니다.
     """)
-    mood = st.selectbox("📆 오늘의 기분은?", ["😄 행복해!", "😎 멋져!", "😴 피곤해...", "🥳 신나!"])
+    mood = st.selectbox("📆 오늘의 기분은?", ["😄 굿굿!", "😎 ㄴㅇㅅ", "😴 졸기 직전...", "🥳 해피해피해피"])
     st.write(f"오늘의 기분: {mood}")
     if st.button("새로고침"):
         st.rerun()
@@ -255,21 +278,39 @@ if menu == "홈":
 # ---------------------------
 elif menu == "미니 블로그":
     st.header("📘 미니 블로그 / 자랑하기")
-    st.markdown("글 작성 시 '블로그' 또는 '자랑하기' 카테고리를 선택하세요.")
+    st.markdown("글 작성 시 '블로그' 또는 '자랑하기' 카테고리를 선택하고, 필요하면 이미지도 업로드할 수 있어요.")
 
     with st.form("blog_form", clear_on_submit=True):
         title = st.text_input("글 제목", placeholder="제목 입력")
         content = st.text_area("글 내용", placeholder="내용 입력")
         category = st.selectbox("카테고리", ["블로그", "자랑하기"])
-        image_url = st.text_input("이미지 URL (자랑하기 시 사용)", placeholder="이미지 URL 입력")
+        
+        # 이미지 파일 업로드 (자랑하기 시 주로 사용)
+        uploaded_file = st.file_uploader("이미지 파일 업로드 (선택)", type=["png", "jpg", "jpeg", "gif"])
         submitted = st.form_submit_button("게시하기")
         if submitted and title and content:
             now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            image_path = ""
+
+            if uploaded_file is not None:
+                # uploads 폴더 없으면 생성
+                if not os.path.exists("uploads"):
+                    os.makedirs("uploads")
+                
+                ext = uploaded_file.name.split('.')[-1]
+                unique_filename = f"{uuid.uuid4().hex}.{ext}"
+                save_path = os.path.join("uploads", unique_filename)
+
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_file.getbuffer())
+
+                image_path = save_path
+
             c = conn.cursor()
             c.execute("""
-                INSERT INTO blog_posts (title, content, timestamp, username, category, image_url) 
+                INSERT INTO blog_posts (title, content, timestamp, username, category, image_url)
                 VALUES (?,?,?,?,?,?)
-            """, (title, content, now, st.session_state.username, category, image_url))
+            """, (title, content, now, st.session_state.username, category, image_path))
             conn.commit()
             st.success("게시글 등록 완료")
             st.rerun()
@@ -439,9 +480,10 @@ elif menu == "건의함":
 # ---------------------------
 elif menu == "자율동아리":
     st.header("🎨 자율동아리")
-    st.markdown("동아리 리스트 및 가입/탈퇴/채팅 기능입니다.")
+    st.markdown("동아리 리스트, 가입/탈퇴, 채팅, 그리고 미디어(이미지/영상 등) 업로드 기능입니다.")
 
     c = conn.cursor()
+
     # 동아리 추가 (제작자/관리자 권한)
     if st.session_state.logged_in and st.session_state.role in ["제작자", "관리자"]:
         with st.form("club_form", clear_on_submit=True):
@@ -463,8 +505,8 @@ elif menu == "자율동아리":
             st.markdown(f"### {club_name}")
             st.write(description)
 
+            # 가입/탈퇴
             if st.session_state.logged_in and st.session_state.username != "게스트":
-                # 가입 여부 확인
                 c.execute("SELECT * FROM club_members WHERE club_id=? AND username=?", (cid, st.session_state.username))
                 is_member = (c.fetchone() is not None)
                 if not is_member:
@@ -522,9 +564,127 @@ elif menu == "자율동아리":
                 else:
                     st.info("채팅 메시지가 없습니다.")
 
+            # [새 기능] 동아리 미디어 업로드 (이미지/영상 등)
+            with st.expander("동아리 미디어 업로드 / 보기"):
+                st.markdown(f"**{club_name}** 미디어 업로드")
+                uploaded_media = st.file_uploader("파일 업로드 (이미지, 동영상, 오디오, 문서 등)", key=f"media_uploader_{cid}", 
+                                                  type=None) 
+                # type=None 이면 모든 파일 가능
+                if st.button("업로드", key=f"upload_btn_{cid}") and uploaded_media is not None:
+                    # uploads_club 폴더 없으면 생성
+                    if not os.path.exists("uploads_club"):
+                        os.makedirs("uploads_club")
+
+                    ext = uploaded_media.name.split('.')[-1].lower()
+                    unique_filename = f"{uuid.uuid4().hex}.{ext}"
+                    save_path = os.path.join("uploads_club", unique_filename)
+
+                    with open(save_path, "wb") as f:
+                        f.write(uploaded_media.getbuffer())
+
+                    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    c.execute("""
+                        INSERT INTO club_media (club_id, username, file_path, upload_time)
+                        VALUES (?,?,?,?)
+                    """, (cid, st.session_state.username, save_path, now))
+                    conn.commit()
+                    st.success("미디어 업로드 완료!")
+                    st.rerun()
+
+                # 업로드된 미디어 목록/보기
+                st.markdown(f"**{club_name} 미디어 목록**")
+                c.execute("""
+                    SELECT id, username, file_path, upload_time
+                    FROM club_media
+                    WHERE club_id=?
+                    ORDER BY id DESC
+                """, (cid,))
+                media_rows = c.fetchall()
+                if media_rows:
+                    for mid, muser, mpath, mtime in media_rows:
+                        st.write(f"[{mid}] 업로드: {muser} / {mtime}")
+                        # 파일 확장자로 타입 판별
+                        file_ext = mpath.split('.')[-1].lower()
+                        if file_ext in ["png", "jpg", "jpeg", "gif"]:
+                            st.image(mpath)
+                        elif file_ext in ["mp4", "mov", "avi", "webm"]:
+                            st.video(mpath)
+                        elif file_ext in ["mp3", "wav", "ogg"]:
+                            st.audio(mpath)
+                        else:
+                            # 이미지/영상/오디오 이외 형식은 그냥 링크 제공
+                            st.write(f"[다운로드 링크]({mpath})")
+                        st.markdown("---")
+                else:
+                    st.info("아직 업로드된 미디어가 없습니다.")
+
             st.markdown("---")
     else:
         st.info("등록된 동아리가 없습니다.")
+
+    if st.button("새로고침"):
+        st.rerun()
+
+# ---------------------------
+# [새 페이지] 해야할일 (ToDo)
+# ---------------------------
+elif menu == "해야할일":
+    st.header("📝 해야할일 (ToDo)")
+    st.markdown("오늘 학교숙제 뭐였지? 나 학교 안 와서 모르는데... 할 때 있죠? 그럴 땐 여기서 확인하세요!")
+
+    c = conn.cursor()
+
+    # 새 할일 추가
+    with st.form("todo_form", clear_on_submit=True):
+        todo_content = st.text_input("할 일 내용", placeholder="예: 영어 숙제하기")
+        submitted_todo = st.form_submit_button("추가하기")
+        if submitted_todo and todo_content:
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            c.execute("""
+                INSERT INTO todos (content, is_done, timestamp)
+                VALUES (?, ?, ?)
+            """, (todo_content, 0, now))
+            conn.commit()
+            st.success("할 일이 추가되었습니다!")
+            st.rerun()
+
+    # 할일 목록 표시
+    st.markdown("### 할일 목록")
+    c.execute("""
+        SELECT id, content, is_done, timestamp
+        FROM todos
+        ORDER BY id DESC
+    """)
+    todos = c.fetchall()
+    if todos:
+        for t in todos:
+            tid, content, is_done, ttime = t
+            col1, col2, col3 = st.columns([0.05, 0.8, 0.15])
+            
+            with col1:
+                # 체크박스로 완료 여부 갱신
+                checked = st.checkbox("", value=bool(is_done), key=f"todo_done_{tid}")
+                if checked != bool(is_done):
+                    new_val = 1 if checked else 0
+                    c.execute("UPDATE todos SET is_done=? WHERE id=?", (new_val, tid))
+                    conn.commit()
+                    st.experimental_rerun()
+
+            with col2:
+                # 내용 + 날짜
+                done_str = "~~" if is_done else ""
+                st.markdown(f"{done_str}{content}{done_str}  \n*({ttime})*")
+
+            with col3:
+                if st.button("삭제", key=f"delete_todo_{tid}"):
+                    c.execute("DELETE FROM todos WHERE id=?", (tid,))
+                    conn.commit()
+                    st.success("할 일이 삭제되었습니다.")
+                    st.rerun()
+
+            st.markdown("---")
+    else:
+        st.info("등록된 할 일이 없습니다.")
 
     if st.button("새로고침"):
         st.rerun()
