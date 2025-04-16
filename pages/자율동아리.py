@@ -94,17 +94,17 @@ for cid, nm, ds in cur.fetchall():
             if ext in ["png","jpg","jpeg","gif"]:
                 try:
                      st.image(fp)
-                except FileNotFoundError:
+                except Exception:
                     st.warning("이미지를 불러올 수 없습니다.")
             elif ext in ["mp4","mov","avi","webm"]:
                 try:
                      st.video(fp)
-                except FileNotFoundError:
+                except Exception:
                     st.warning("영상을 불러올 수 없습니다.")
             elif ext in ["mp3","wav","ogg"]:
                 try:
                      st.audio(fp)
-                except FileNotFoundError:
+                except Exception:
                     st.warning("이미지를 불러올 수 없습니다.")
             else: st.write(f"[다운로드]({fp})")
             
