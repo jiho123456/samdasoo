@@ -4,7 +4,10 @@ import streamlit as st
 import psycopg2
 from datetime import datetime
 import pandas as pd
+from streamlit_autorefresh import st_autorefresh
 
+# causes the whole script to rerun every 5 seconds
+_ = st_autorefresh(interval=5_000, key="global_autorefresh")
 # ---------------------------
 # 1) 캐시된 DB 연결 (Connection Pooler + keepalives)
 # ---------------------------
