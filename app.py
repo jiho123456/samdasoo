@@ -24,132 +24,130 @@ def init_db():
         
         # Create a cursor to execute SQL queries
         c = conn.cursor()
+        
+        # 1) users table
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE,
+                password TEXT,
+                role TEXT DEFAULT '일반학생'
+            )
+        ''')
+        conn.commit()
 
+        # 2) blog_posts: 미니 블로그 & 자랑하기 통합
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS blog_posts (
+                id SERIAL PRIMARY KEY,
+                title TEXT,
+                content TEXT,
+                timestamp TEXT,
+                username TEXT,
+                category TEXT DEFAULT '블로그',
+                image_url TEXT DEFAULT ''
+            )
+        ''')
+        conn.commit()
+
+        # 3) blog_comments: 댓글 테이블
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS blog_comments (
+                id SERIAL PRIMARY KEY,
+                post_id INTEGER,
+                username TEXT,
+                comment TEXT,
+                timestamp TEXT
+            )
+        ''')
+        conn.commit()
+
+        # 4) clubs and related tables
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS clubs (
+                id SERIAL PRIMARY KEY,
+                club_name TEXT,
+                description TEXT
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS club_members (
+                id SERIAL PRIMARY KEY,
+                club_id INTEGER,
+                username TEXT,
+                UNIQUE(club_id, username)
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS club_chats (
+                id SERIAL PRIMARY KEY,
+                club_id INTEGER,
+                username TEXT,
+                message TEXT,
+                timestamp TEXT
+            )
+        ''')
+        conn.commit()
+
+        # club_media: 동아리 미디어 (이미지/동영상 등)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS club_media (
+                id SERIAL PRIMARY KEY,
+                club_id INTEGER,
+                username TEXT,
+                file_path TEXT,
+                upload_time TEXT
+            )
+        ''')
+        conn.commit()
+
+        # 5) quizzes and quiz_attempts tables
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS quizzes (
+                id SERIAL PRIMARY KEY,
+                title TEXT,
+                description TEXT,
+                created_by TEXT,
+                timestamp TEXT
+            )
+        ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS quiz_attempts (
+                id SERIAL PRIMARY KEY,
+                quiz_id INTEGER,
+                username TEXT,
+                score INTEGER,
+                timestamp TEXT
+            )
+        ''')
+        conn.commit()
+
+        # 6) suggestions: 건의함
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id SERIAL PRIMARY KEY,
+                content TEXT,
+                username TEXT,
+                timestamp TEXT
+            )
+        ''')
+        conn.commit()
+
+        # todos: 해야할일
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS todos (
+                id SERIAL PRIMARY KEY,
+                content TEXT,
+                is_done INTEGER DEFAULT 0, 
+                timestamp TEXT
+            )
+        ''')
+        conn.commit()
+
+        return conn
     except Exception as e:
         st.error("서버 데이터베이스 문제임 이거 보면 제작자한테 말하셈")
         st.error(e)
-
-
-    # 1) users table
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE,
-            password TEXT,
-            role TEXT DEFAULT '일반학생'
-        )
-    ''')
-    conn.commit()
-
-    # 2) blog_posts: 미니 블로그 & 자랑하기 통합
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS blog_posts (
-            id SERIAL PRIMARY KEY,
-            title TEXT,
-            content TEXT,
-            timestamp TEXT,
-            username TEXT,
-            category TEXT DEFAULT '블로그',
-            image_url TEXT DEFAULT ''
-        )
-    ''')
-    conn.commit()
-
-    # 3) blog_comments: 댓글 테이블
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS blog_comments (
-            id SERIAL PRIMARY KEY,
-            post_id INTEGER,
-            username TEXT,
-            comment TEXT,
-            timestamp TEXT
-        )
-    ''')
-    conn.commit()
-
-    # 4) clubs and related tables
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS clubs (
-            id SERIAL PRIMARY KEY,
-            club_name TEXT,
-            description TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS club_members (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            UNIQUE(club_id, username)
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS club_chats (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            message TEXT,
-            timestamp TEXT
-        )
-    ''')
-    conn.commit()
-
-    # club_media: 동아리 미디어 (이미지/동영상 등)
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS club_media (
-            id SERIAL PRIMARY KEY,
-            club_id INTEGER,
-            username TEXT,
-            file_path TEXT,
-            upload_time TEXT
-        )
-    ''')
-    conn.commit()
-
-    # 5) quizzes and quiz_attempts tables
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS quizzes (
-            id SERIAL PRIMARY KEY,
-            title TEXT,
-            description TEXT,
-            created_by TEXT,
-            timestamp TEXT
-        )
-    ''')
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS quiz_attempts (
-            id SERIAL PRIMARY KEY,
-            quiz_id INTEGER,
-            username TEXT,
-            score INTEGER,
-            timestamp TEXT
-        )
-    ''')
-    conn.commit()
-
-    # 6) suggestions: 건의함
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS suggestions (
-            id SERIAL PRIMARY KEY,
-            content TEXT,
-            username TEXT,
-            timestamp TEXT
-        )
-    ''')
-    conn.commit()
-
-    # todos: 해야할일
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS todos (
-            id SERIAL PRIMARY KEY,
-            content TEXT,
-            is_done INTEGER DEFAULT 0, 
-            timestamp TEXT
-        )
-    ''')
-    conn.commit()
-
-    return conn
 
 conn = init_db()
 
