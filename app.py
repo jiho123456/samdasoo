@@ -241,16 +241,22 @@ with st.sidebar.expander("로그인 / 회원가입"):
 # 사이드바 메뉴
 # ---------------------------
 st.sidebar.title("메뉴 선택")
-menu = st.sidebar.radio("페이지 이동", [
+menu_options = [
     "홈",
     "미니 블로그",
     "우리 반 명단",
     "퀴즈",
     "건의함",
     "자율동아리",
-    "해야할일",
-    "운영진 페이지"  # 새로 추가
-])
+    "해야할일"
+]
+
+# Only show "운영진 페이지" in sidebar if user is in one of the moderator roles
+if st.session_state.role in ["제작자", "반장", "부반장"]:
+    menu_options.append("운영진 페이지")
+
+menu = st.sidebar.radio("페이지 이동", menu_options)
+
 
 # ---------------------------
 # 공통 헤더
