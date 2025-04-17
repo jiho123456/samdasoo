@@ -82,6 +82,7 @@ def render_login_sidebar():
                     np = st.text_input("비밀번호", type="password", key="reg_p")
                     if not namecheck(nu):
                         st.error("회원가입은 본인 이름(한글 혹은 영어)로 해주세요.")
+                        st.stop()
                     if st.form_submit_button("회원가입"):
                         try:
                             cur = conn.cursor()
