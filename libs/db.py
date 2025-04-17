@@ -1,3 +1,4 @@
+# libs/db.py
 import streamlit as st
 import psycopg2
 
@@ -14,21 +15,32 @@ def get_conn():
         keepalives_interval=10,
         keepalives_count=5
     )
-    conn.autocommit = True   # 트랜잭션 자동 커밋
+    conn.autocommit = True
     return conn
 
 def init_tables():
     """
     최초 1회만 실행하세요. 
-    kicked_users 테이블을 생성합니다.
+    여기서는 별도 임시 커넥션을 사용하고, 
+    캐시된 get_conn() 커넥션은 닫지 않습니다.
     """
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
+    # 임시 커넥션
+    tmp_conn = psycopg2.connect(
+        user=st.secrets["user"],
+        password=st.secrets["password"],
+        host=st.secrets["host"],
+        port=st.secrets["port"],
+        dbname=st.secrets["dbname"]
+    )
+    tmp_cur = tmp_conn.cursor()
+
+    # kicked_users 테이블 생성
+    tmp_cur.execute("""
         CREATE TABLE IF NOT EXISTS kicked_users (
             username TEXT PRIMARY KEY,
             reason   TEXT NOT NULL,
             kicked_at TIMESTAMPTZ DEFAULT now()
         );
     """)
-    conn.commit()
+    tmp_conn.commit()
+    tmp_conn.close()  # 여기만 닫고, 캐시된 커넥션은 손대지 않습니다.
