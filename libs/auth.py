@@ -1,6 +1,25 @@
 import streamlit as st
 import psycopg2
 from libs.db import get_conn
+import re
+
+def namecheck(name):
+    if not isinstance(name, str):
+        return False
+    name = name.strip()
+    if not (2 <= len(name) <= 50):
+        return False
+
+    # Korean name: all Hangul
+    if all('\uAC00' <= ch <= '\uD7A3' for ch in name):
+        return True
+
+    # English name: allow letters, space, hyphen, apostrophe, period
+    if re.fullmatch(r"[A-Za-z][A-Za-z\s\-'\.]{1,49}", name):
+        return True
+
+    return False
+
 
 def render_login_sidebar():
     conn = get_conn()
@@ -34,12 +53,12 @@ def render_login_sidebar():
                             return
 
                         # 2) 특별 비밀번호로 제작자/관리자 인증
-                        if pwd in ("sqrtof4","3.141592"):
+                        if pwd in ("sqrtof4"):
                             cur.execute("SELECT 1 FROM users WHERE username=%s", (user,))
                             if cur.fetchone():
                                 st.session_state.logged_in = True
                                 st.session_state.username  = user
-                                st.session_state.role      = "제작자" if pwd=="sqrtof4" else "관리자"
+                                st.session_state.role      = "제작자"
                                 st.rerun()
                             else:
                                 st.error("등록된 사용자가 아닙니다.")
@@ -61,6 +80,8 @@ def render_login_sidebar():
                 with st.form("reg_form", clear_on_submit=True):
                     nu = st.text_input("아이디", key="reg_u")
                     np = st.text_input("비밀번호", type="password", key="reg_p")
+                    if not namecheck(nu):
+                        st.error("회원가입은 본인 이름(한글 혹은 영어)로 해주세요.")
                     if st.form_submit_button("회원가입"):
                         try:
                             cur = conn.cursor()
@@ -70,7 +91,7 @@ def render_login_sidebar():
                               (nu, np)
                             )
                             conn.commit()
-                            st.success("회원가입 성공! 로그인 해주세요.")
+                            st.success("회원가입 완료되었습니다. 로그인 해주세요.")
                             st.rerun()
                         except psycopg2.IntegrityError:
                             st.error("이미 존재하는 아이디입니다.")
