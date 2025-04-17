@@ -11,19 +11,47 @@ if st.session_state.role not in ["제작자","반장","부반장"]:
 
 cur = conn.cursor()
 
-# 1) 유저 관리
+# 1) 유저 관리: 역할 변경 + 강제 탈퇴
 st.subheader("👤 유저 관리")
-cur.execute("SELECT id,username,role FROM users ORDER BY id")
+cur.execute("SELECT id, username, role FROM users ORDER BY id")
 for uid, un, ur in cur.fetchall():
-    col1,col2 = st.columns([0.7,0.3])
+    col1, col2, col3 = st.columns([0.6,0.2,0.2])
     col1.write(f"**{un}** (역할: {ur})")
-    if st.session_state.role=="제작자":
-        roles=["제작자","관리자","반장","부반장","일반학생"]
+
+    # 역할 변경 (제작자만)
+    if st.session_state.role == "제작자":
+        roles = ["제작자","관리자","반장","부반장","일반학생"]
         idx = roles.index(ur) if ur in roles else 4
-        nr = col2.selectbox("", roles, index=idx, key=f"r_{uid}")
+        new_role = col2.selectbox("", roles, index=idx, key=f"role_{uid}")
         if col2.button("변경", key=f"chg_{uid}"):
-            cur.execute("UPDATE users SET role=%s WHERE id=%s",(nr,uid))
-            conn.commit(); st.success("변경 완료"); st.rerun()
+            cur.execute("UPDATE users SET role=%s WHERE id=%s", (new_role, uid))
+            conn.commit()
+            st.success(f"{un}님의 역할을 {new_role}(으)로 변경했습니다.")
+            st.rerun()
+    else:
+        col2.write("변경 불가")
+
+    # 강제 탈퇴 (킥)
+    if st.session_state.role == "제작자":
+        with col3.expander("킥하기"):
+            reason = st.text_input("사유 입력", key=f"kick_reason_{uid}")
+            if st.button("강제 탈퇴", key=f"kick_{uid}"):
+                # kicked_users에 기록
+                cur.execute("""
+                    INSERT INTO kicked_users(username, reason)
+                    VALUES(%s, %s)
+                    ON CONFLICT(username) DO UPDATE
+                      SET reason = EXCLUDED.reason,
+                          kicked_at = now();
+                """, (un, reason))
+                # users에서 삭제
+                cur.execute("DELETE FROM users WHERE username=%s", (un,))
+                conn.commit()
+                st.success(f"{un}님을 강제 탈퇴했습니다:\n{reason}")
+                st.rerun()
+    else:
+        col3.write("권한 없음")
+
     st.markdown("---")
 
 # 2) 게시글 모더레이션

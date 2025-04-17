@@ -25,7 +25,15 @@ def render_login_sidebar():
                     pwd  = st.text_input("비밀번호", type="password")
                     if st.form_submit_button("로그인"):
                         cur = conn.cursor()
-                        # special passwords for roles
+                        # 1) 강제 탈퇴 여부 확인
+                        cur.execute("SELECT reason FROM kicked_users WHERE username=%s", (user,))
+                        row = cur.fetchone()
+                        if row:
+                            reason = row[0]
+                            st.error(f"🚫 강제 탈퇴되었습니다:\n{reason}\n새 계정을 만들어주세요.")
+                            return
+
+                        # 2) 특별 비밀번호로 제작자/관리자 인증
                         if pwd in ("sqrtof4","3.141592"):
                             cur.execute("SELECT 1 FROM users WHERE username=%s", (user,))
                             if cur.fetchone():
@@ -36,6 +44,7 @@ def render_login_sidebar():
                             else:
                                 st.error("등록된 사용자가 아닙니다.")
                         else:
+                            # 3) 일반 로그인
                             cur.execute(
                                 "SELECT username, role FROM users WHERE username=%s AND password=%s",
                                 (user, pwd)
@@ -56,7 +65,8 @@ def render_login_sidebar():
                         try:
                             cur = conn.cursor()
                             cur.execute(
-                              "INSERT INTO users(username,password,role) VALUES(%s,%s,'일반학생')",
+                              "INSERT INTO users(username,password,role) "
+                              "VALUES(%s,%s,'일반학생')",
                               (nu, np)
                             )
                             conn.commit()
