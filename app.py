@@ -5,7 +5,7 @@ from libs.auth import render_login_sidebar
 from libs.ui_helpers import header
 
 # ── 최초 1회만 실행하고 주석 처리하세요 ───────────────────
-init_tables()
+# init_tables()
 
 # ── 글로벌 자동 새로고침 (5초) ──────────────────────────
 _ = st_autorefresh(interval=5_000, key="global_autorefresh")
