@@ -80,22 +80,24 @@ def render_login_sidebar():
                 with st.form("reg_form", clear_on_submit=True):
                     nu = st.text_input("아이디", key="reg_u")
                     np = st.text_input("비밀번호", type="password", key="reg_p")
-                    if namecheck(nu) == False and not nu == "":
-                        st.error("회원가입은 본인 이름(한글 혹은 영어)로 해주세요.")
-                        st.stop()
-                    if st.form_submit_button("회원가입"):
+                    btn = st.form_submit_button("회원가입")
+                    if btn:
+                        if not namecheck(nu):
+                            st.error("회원가입은 본인 이름(한글 혹은 영어)로 해주세요.")
+                            st.stop()
                         try:
                             cur = conn.cursor()
                             cur.execute(
-                              "INSERT INTO users(username,password,role) "
-                              "VALUES(%s,%s,'일반학생')",
-                              (nu, np)
+                            "INSERT INTO users(username,password,role) "
+                            "VALUES(%s,%s,'일반학생')",
+                            (nu, np)
                             )
                             conn.commit()
                             st.success("회원가입 완료되었습니다. 로그인 해주세요.")
                             st.rerun()
                         except psycopg2.IntegrityError:
                             st.error("이미 존재하는 아이디입니다.")
+
             else:
                 if st.button("게스트 로그인"):
                     st.session_state.logged_in = True
