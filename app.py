@@ -1,14 +1,10 @@
 import streamlit as st
-from streamlit_autorefresh import st_autorefresh
 from libs.db import init_tables
 from libs.auth import render_login_sidebar
 from libs.ui_helpers import header
 
 # ── 최초 1회만 실행하고 주석 처리하세요 ───────────────────
 # init_tables()
-
-# ── 글로벌 자동 새로고침 (5초) ──────────────────────────
-_ = st_autorefresh(interval=5_000, key="global_autorefresh")
 
 # ── 사이드바 로그인/회원가입 렌더링 ──────────────────────
 render_login_sidebar()
