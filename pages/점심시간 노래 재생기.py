@@ -3,6 +3,7 @@ import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 import os
 from dotenv import load_dotenv
+import time
 
 # Load environment variables
 load_dotenv()
@@ -14,14 +15,24 @@ SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI')
 
 st.title("점심시간 노래 재생기")
 
+# Initialize session state for queue
+if 'queue' not in st.session_state:
+    st.session_state.queue = []
+if 'current_track' not in st.session_state:
+    st.session_state.current_track = None
+if 'sp' not in st.session_state:
+    st.session_state.sp = None
+
 # Initialize Spotify client
 def init_spotify():
-    return spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-        redirect_uri=SPOTIFY_REDIRECT_URI,
-        scope="playlist-modify-public playlist-modify-private"
-    ))
+    if st.session_state.sp is None:
+        st.session_state.sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
+            client_id=SPOTIFY_CLIENT_ID,
+            client_secret=SPOTIFY_CLIENT_SECRET,
+            redirect_uri=SPOTIFY_REDIRECT_URI,
+            scope="playlist-modify-public playlist-modify-private user-read-playback-state user-modify-playback-state"
+        ))
+    return st.session_state.sp
 
 # Search for tracks
 def search_tracks(sp, query):
@@ -36,50 +47,79 @@ def add_to_playlist(sp, playlist_id, track_uris):
 def create_spotify_embed(track_id):
     return f'<iframe src="https://open.spotify.com/embed/track/{track_id}" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>'
 
+# Play next track in queue
+def play_next_track():
+    if st.session_state.queue:
+        next_track = st.session_state.queue.pop(0)
+        st.session_state.current_track = next_track
+        try:
+            sp = init_spotify()
+            sp.start_playback(uris=[next_track['uri']])
+            return True
+        except Exception as e:
+            st.error(f"재생 중 오류 발생: {str(e)}")
+            return False
+    return False
+
 # Main app
 def main():
     if not all([SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REDIRECT_URI]):
-        st.error("Please set up your Spotify API credentials in the .env file")
+        st.error("Spotify API credentials를 .env 파일에 설정해주세요")
         return
 
     try:
         sp = init_spotify()
         
-        # Search for songs
-        search_query = st.text_input("노래 검색:")
+        # Current playing track display
+        if st.session_state.current_track:
+            st.subheader("현재 재생 중")
+            st.write(f"**{st.session_state.current_track['name']}** - {st.session_state.current_track['artists'][0]['name']}")
+            st.markdown(create_spotify_embed(st.session_state.current_track['id']), unsafe_allow_html=True)
+        
+        # Queue display
+        if st.session_state.queue:
+            st.subheader("대기열")
+            for i, track in enumerate(st.session_state.queue):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"{i+1}. {track['name']} - {track['artists'][0]['name']}")
+                with col2:
+                    if st.button("삭제", key=f"remove_{track['id']}"):
+                        st.session_state.queue.pop(i)
+                        st.rerun()
+        
+        # Search section
+        st.subheader("노래 검색")
+        search_query = st.text_input("노래 제목 또는 아티스트:")
         if search_query:
             results = search_tracks(sp, search_query)
             
             if results:
                 st.write("검색 결과:")
                 for track in results:
-                    # Create a container for each track
-                    with st.container():
-                        col1, col2 = st.columns([3, 1])
-                        with col1:
-                            # Display track info
-                            st.write(f"**{track['name']}** - {track['artists'][0]['name']}")
-                            # Add Spotify player embed
-                            st.markdown(create_spotify_embed(track['id']), unsafe_allow_html=True)
-                        with col2:
-                            if st.button("플레이리스트에 추가", key=track['id']):
-                                # Get or create playlist
-                                playlists = sp.current_user_playlists()
-                                if not playlists['items']:
-                                    playlist = sp.user_playlist_create(
-                                        sp.current_user()['id'],
-                                        "점심시간 플레이리스트",
-                                        public=True
-                                    )
-                                else:
-                                    playlist = playlists['items'][0]
-                                
-                                # Add track to playlist
-                                add_to_playlist(sp, playlist['id'], [track['uri']])
-                                st.success(f"{track['name']}을(를) {playlist['name']}에 추가했습니다!")
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"**{track['name']}** - {track['artists'][0]['name']}")
+                        st.markdown(create_spotify_embed(track['id']), unsafe_allow_html=True)
+                    with col2:
+                        if st.button("대기열에 추가", key=track['id']):
+                            st.session_state.queue.append(track)
+                            st.success(f"{track['name']}을(를) 대기열에 추가했습니다!")
+                            if not st.session_state.current_track:
+                                play_next_track()
+                            st.rerun()
             else:
                 st.write("검색 결과가 없습니다")
-                
+        
+        # Auto-play next track
+        if st.session_state.current_track:
+            try:
+                current_playback = sp.current_playback()
+                if current_playback and not current_playback['is_playing']:
+                    play_next_track()
+            except:
+                pass
+        
     except Exception as e:
         st.error(f"오류가 발생했습니다: {str(e)}")
 
