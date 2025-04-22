@@ -69,7 +69,7 @@ while True:
     db_display.text("마이크 접근 권한을 허용해주세요...")
     
     # Add a small delay to prevent excessive CPU usage
-    st.experimental_rerun()
+    st.rerun()
 
 
 
