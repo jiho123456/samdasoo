@@ -40,13 +40,20 @@ audio_html = """
                     // Only update if the change is significant
                     if (Math.abs(db - lastDbLevel) > 1) {
                         lastDbLevel = db;
-                        window.parent.postMessage({type: 'db_level', value: db}, '*');
+                        // Send data to Streamlit
+                        window.parent.postMessage({
+                            type: 'streamlit:setComponentValue',
+                            value: db
+                        }, '*');
                     }
                 };
             })
             .catch(function(err) {
                 console.error('Error accessing microphone:', err);
-                window.parent.postMessage({type: 'error', value: err.message}, '*');
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    value: -1
+                }, '*');
             });
     }
     
@@ -54,24 +61,16 @@ audio_html = """
 </script>
 """
 
-# Display the audio capture interface
-st.components.v1.html(audio_html, height=0)
-
-# Create a placeholder for the decibel display
-db_display = st.empty()
+# Display the audio capture interface and get the value
+db_value = st.components.v1.html(audio_html, height=0, key="audio_capture")
 
 # Initialize session state for db level
 if 'db_level' not in st.session_state:
     st.session_state.db_level = 0
 
-# Function to calculate decibels
-def calculate_db(level):
-    # Convert the level to a reasonable decibel range
-    # The raw level from the audio API is between -Infinity and 0
-    # We'll map it to a more readable range (0-100)
-    if level <= -100:
-        return 0
-    return abs(level)
+# Update session state with new value if available
+if db_value is not None and db_value != -1:
+    st.session_state.db_level = db_value
 
 # Function to get sound description
 def get_sound_description(db_level):
@@ -96,44 +95,37 @@ def get_sound_description(db_level):
     else:
         return "🔊 귀에 심각한 손상을 줄 수 있는 소리 (제트기 엔진 소음)"
 
-# Create a container for the visualization
-viz_container = st.empty()
+# Display the current decibel level
+db_level = st.session_state.db_level
 
-# Main display loop
-while True:
-    try:
-        # Get the latest db level from session state
-        db_level = st.session_state.db_level
-        
-        # Display the decibel level with a visual indicator
-        with db_display.container():
-            st.markdown(f"""
-                <div style="text-align: center;">
-                    <h2>{db_level:.1f} dB</h2>
-                    <div style="width: 100%; height: 20px; background: linear-gradient(to right, 
-                        #4CAF50 0%, 
-                        #FFC107 {min(db_level, 50)}%, 
-                        #F44336 {min(db_level, 100)}%); 
-                        border-radius: 10px;">
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Display the sound description
-            description = get_sound_description(db_level)
-            if db_level < 60:
-                st.success(description)
-            elif db_level < 80:
-                st.warning(description)
-            else:
-                st.error(description)
-        
-        # Add a small delay to prevent excessive CPU usage
-        st.rerun()
-        
-    except Exception as e:
-        st.error(f"오류가 발생했습니다: {str(e)}")
-        break
+# Show microphone permission message if needed
+if db_level == 0:
+    st.info("마이크 접근 권한을 허용해주세요...")
+else:
+    # Display the decibel level with a visual indicator
+    st.markdown(f"""
+        <div style="text-align: center;">
+            <h2>{db_level:.1f} dB</h2>
+            <div style="width: 100%; height: 20px; background: linear-gradient(to right, 
+                #4CAF50 0%, 
+                #FFC107 {min(db_level, 50)}%, 
+                #F44336 {min(db_level, 100)}%); 
+                border-radius: 10px;">
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Display the sound description
+    description = get_sound_description(db_level)
+    if db_level < 60:
+        st.success(description)
+    elif db_level < 80:
+        st.warning(description)
+    else:
+        st.error(description)
+
+# Add auto-refresh
+st.experimental_rerun()
 
 
 
