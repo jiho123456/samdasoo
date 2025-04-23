@@ -5,6 +5,7 @@ st.title("데시벨 측정기")
 
 # HTML and JavaScript for audio capture
 audio_html = """
+<div id="audio-container"></div>
 <script>
     const constraints = {
         audio: true,
@@ -40,20 +41,28 @@ audio_html = """
                     // Only update if the change is significant
                     if (Math.abs(db - lastDbLevel) > 1) {
                         lastDbLevel = db;
-                        // Send data to Streamlit
-                        window.parent.postMessage({
-                            type: 'streamlit:setComponentValue',
-                            value: db
-                        }, '*');
+                        // Update the display
+                        document.getElementById('audio-container').innerHTML = `
+                            <div style="text-align: center;">
+                                <h2>${db.toFixed(1)} dB</h2>
+                                <div style="width: 100%; height: 20px; background: linear-gradient(to right, 
+                                    #4CAF50 0%, 
+                                    #FFC107 ${Math.min(db, 50)}%, 
+                                    #F44336 ${Math.min(db, 100)}%); 
+                                    border-radius: 10px;">
+                                </div>
+                            </div>
+                        `;
                     }
                 };
             })
             .catch(function(err) {
                 console.error('Error accessing microphone:', err);
-                window.parent.postMessage({
-                    type: 'streamlit:setComponentValue',
-                    value: -1
-                }, '*');
+                document.getElementById('audio-container').innerHTML = `
+                    <div style="text-align: center; color: red;">
+                        마이크 접근 권한을 허용해주세요...
+                    </div>
+                `;
             });
     }
     
@@ -61,16 +70,8 @@ audio_html = """
 </script>
 """
 
-# Display the audio capture interface and get the value
-db_value = st.components.v1.html(audio_html, height=0, key="audio_capture")
-
-# Initialize session state for db level
-if 'db_level' not in st.session_state:
-    st.session_state.db_level = 0
-
-# Update session state with new value if available
-if db_value is not None and db_value != -1:
-    st.session_state.db_level = db_value
+# Display the audio capture interface
+st.components.v1.html(audio_html, height=100)
 
 # Function to get sound description
 def get_sound_description(db_level):
@@ -94,35 +95,6 @@ def get_sound_description(db_level):
         return "🔊 귀가 아프고 위험한 소리 (비행기 이륙 소음)"
     else:
         return "🔊 귀에 심각한 손상을 줄 수 있는 소리 (제트기 엔진 소음)"
-
-# Display the current decibel level
-db_level = st.session_state.db_level
-
-# Show microphone permission message if needed
-if db_level == 0:
-    st.info("마이크 접근 권한을 허용해주세요...")
-else:
-    # Display the decibel level with a visual indicator
-    st.markdown(f"""
-        <div style="text-align: center;">
-            <h2>{db_level:.1f} dB</h2>
-            <div style="width: 100%; height: 20px; background: linear-gradient(to right, 
-                #4CAF50 0%, 
-                #FFC107 {min(db_level, 50)}%, 
-                #F44336 {min(db_level, 100)}%); 
-                border-radius: 10px;">
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    # Display the sound description
-    description = get_sound_description(db_level)
-    if db_level < 60:
-        st.success(description)
-    elif db_level < 80:
-        st.warning(description)
-    else:
-        st.error(description)
 
 # Add auto-refresh
 st.experimental_rerun()
