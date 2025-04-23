@@ -1,16 +1,16 @@
+# Initialize session state variables before any Streamlit commands
 import streamlit as st
+
+# Initialize all session state variables at the very beginning
+for key in ['role', 'user_id', 'is_logged_in']:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
+# Now import other modules
 from streamlit_autorefresh import st_autorefresh
 from libs.db import init_tables
 from libs.auth import render_login_sidebar
 from libs.ui_helpers import header
-
-# Initialize session state variables
-if 'role' not in st.session_state:
-    st.session_state.role = None
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'is_logged_in' not in st.session_state:
-    st.session_state.is_logged_in = False
 
 # ── 최초 1회만 실행하고 주석 처리하세요 ───────────────────
 # init_tables()

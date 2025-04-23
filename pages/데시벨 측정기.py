@@ -97,7 +97,7 @@ def get_sound_description(db_level):
         return "🔊 귀에 심각한 손상을 줄 수 있는 소리 (제트기 엔진 소음)"
 
 # Add auto-refresh
-st.experimental_rerun()
+st.rerun()
 
 
 
