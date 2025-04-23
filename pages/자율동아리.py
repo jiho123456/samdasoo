@@ -3,13 +3,17 @@ from datetime import datetime
 from libs.db import get_conn
 from libs.ui_helpers import header
 
-# Initialize session state variables at the very beginning
+# Initialize all session state variables at the very beginning
 if 'role' not in st.session_state:
     st.session_state.role = None
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 if 'is_logged_in' not in st.session_state:
     st.session_state.is_logged_in = False
+if 'username' not in st.session_state:
+    st.session_state.username = "게스트"
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
 conn = get_conn()
 header()
