@@ -1,5 +1,6 @@
 import streamlit as st
 import psycopg2
+import psycopg2.errors
 from libs.db import get_conn
 import re
 
@@ -69,11 +70,19 @@ def render_login_sidebar():
                                 st.error("등록된 사용자가 아닙니다.")
                         else:
                             # 3) 일반 로그인 (get user_id, username, role)
-                            cur.execute(
-                                "SELECT user_id, username, role FROM users WHERE username=%s AND password=%s",
-                                (user, pwd)
-                            )
-                            row2 = cur.fetchone()
+                            try:
+                                cur.execute(
+                                    "SELECT user_id, username, role FROM users WHERE username=%s AND password=%s",
+                                    (user, pwd)
+                                )
+                                row2 = cur.fetchone()
+                            except psycopg2.errors.UndefinedColumn:
+                                # fallback for DB without password column
+                                cur.execute(
+                                    "SELECT user_id, username, role FROM users WHERE username=%s",
+                                    (user,)
+                                )
+                                row2 = cur.fetchone()
                             if row2:
                                 st.session_state.logged_in = True
                                 st.session_state.user_id   = row2[0]

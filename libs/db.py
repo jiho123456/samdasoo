@@ -52,12 +52,13 @@ def init_tables():
             DROP TABLE IF EXISTS users CASCADE;
         """)
 
-        # Users 테이블 생성 (with roles and currency)
+        # Users 테이블 생성 (with roles, currency, and password)
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('teacher', 'student')),
+                password TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('teacher', 'student', '제작자', '일반학생')),
                 currency INTEGER DEFAULT 0,
                 job_id INTEGER,
                 created_at TIMESTAMPTZ DEFAULT now()
