@@ -6,3 +6,5 @@ streamlit-autorefresh==1.0.1
 sounddevice==0.4.6
 numpy==1.26.3
 spotipy==2.23.0
+yfinance==0.2.36
+plotly==5.18.0
