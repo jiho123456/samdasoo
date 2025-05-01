@@ -27,6 +27,7 @@ def render_login_sidebar():
         st.session_state.logged_in = False
         st.session_state.username  = "게스트"
         st.session_state.role      = "일반학생"
+        st.session_state.user_id   = None
 
     with st.sidebar.expander("로그인 / 회원가입"):
         if st.session_state.logged_in:
@@ -35,6 +36,7 @@ def render_login_sidebar():
                 st.session_state.logged_in = False
                 st.session_state.username  = "게스트"
                 st.session_state.role      = "일반학생"
+                st.session_state.user_id   = None
                 st.rerun()
         else:
             choice = st.radio("옵션 선택", ["로그인","회원가입","게스트 로그인"], key="login_choice")
@@ -54,25 +56,29 @@ def render_login_sidebar():
 
                         # 2) 특별 비밀번호로 제작자/관리자 인증
                         if pwd in ("sqrtof4"):
-                            cur.execute("SELECT 1 FROM users WHERE username=%s", (user,))
-                            if cur.fetchone():
+                            # check user exists and get user_id
+                            cur.execute("SELECT user_id FROM users WHERE username=%s", (user,))
+                            id_row = cur.fetchone()
+                            if id_row:
                                 st.session_state.logged_in = True
                                 st.session_state.username  = user
                                 st.session_state.role      = "제작자"
+                                st.session_state.user_id   = id_row[0]
                                 st.rerun()
                             else:
                                 st.error("등록된 사용자가 아닙니다.")
                         else:
-                            # 3) 일반 로그인
+                            # 3) 일반 로그인 (get user_id, username, role)
                             cur.execute(
-                                "SELECT username, role FROM users WHERE username=%s AND password=%s",
+                                "SELECT user_id, username, role FROM users WHERE username=%s AND password=%s",
                                 (user, pwd)
                             )
-                            row = cur.fetchone()
-                            if row:
+                            row2 = cur.fetchone()
+                            if row2:
                                 st.session_state.logged_in = True
-                                st.session_state.username  = row[0]
-                                st.session_state.role      = row[1]
+                                st.session_state.user_id   = row2[0]
+                                st.session_state.username  = row2[1]
+                                st.session_state.role      = row2[2]
                                 st.rerun()
                             else:
                                 st.error("아이디 또는 비밀번호가 틀렸습니다.")
@@ -103,4 +109,5 @@ def render_login_sidebar():
                     st.session_state.logged_in = True
                     st.session_state.username  = "게스트"
                     st.session_state.role      = "일반학생"
+                    st.session_state.user_id   = None
                     st.rerun()

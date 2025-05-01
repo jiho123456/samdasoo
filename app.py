@@ -2,7 +2,7 @@
 import streamlit as st
 
 # Initialize all session state variables at the very beginning
-for key in ['role', 'user_id', 'is_logged_in']:
+for key in ['role', 'user_id', 'logged_in']:
     if key not in st.session_state:
         st.session_state[key] = None
 
@@ -31,7 +31,7 @@ render_login_sidebar()
 header()
 
 # ── 페이지 라우팅 ──────────────────────────────────────
-if st.session_state.get('is_logged_in'):
+if st.session_state.get('logged_in'):
     with st.sidebar:
         st.subheader("📱 메뉴")
         page = st.radio(
