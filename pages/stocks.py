@@ -5,46 +5,57 @@ from libs.stocks import (
     get_user_portfolio, get_stock_history, get_all_stocks
 )
 from libs.currency import get_user_currency
+from libs.db import get_conn
 
 def render_stocks_page():
     st.title("📈 모의 주식 투자")
     
-    if not st.session_state.is_logged_in:
+    if not st.session_state.get('is_logged_in'):
         st.warning("로그인이 필요합니다.")
         return
     
-    user_id = st.session_state.user_id
+    user_id = st.session_state.get('user_id')
+    if not user_id:
+        st.warning("로그인이 필요합니다.")
+        return
+    
     conn = get_conn()
     cur = conn.cursor()
     
     # Get user role
     cur.execute("SELECT role FROM users WHERE user_id = %s", (user_id,))
-    user_role = cur.fetchone()[0]
+    result = cur.fetchone()
+    if not result:
+        st.error("사용자 정보를 찾을 수 없습니다.")
+        return
+    
+    user_role = result[0]
     
     # Display user's current balance
     balance = get_user_currency(user_id)
     st.metric("내 잔고", f"{balance:,}원")
     
-    # Teacher-specific features
+    # Teacher-specific features in sidebar
     if user_role == 'teacher':
-        st.subheader("👨‍🏫 선생님 기능")
-        
-        # Add new stock
-        with st.expander("➕ 새로운 주식 추가"):
-            symbol = st.text_input("주식 심볼 (예: AAPL, GOOGL)")
-            name = st.text_input("회사 이름")
+        with st.sidebar:
+            st.subheader("👨‍🏫 선생님 기능")
             
-            if st.button("추가"):
-                try:
-                    add_stock(symbol, name)
-                    st.success(f"{name} ({symbol}) 주식이 추가되었습니다!")
-                except Exception as e:
-                    st.error(str(e))
-        
-        # Update stock prices
-        if st.button("주가 업데이트"):
-            update_stock_prices()
-            st.success("주가가 업데이트되었습니다!")
+            # Add new stock
+            with st.expander("➕ 새로운 주식 추가"):
+                symbol = st.text_input("주식 심볼 (예: AAPL, GOOGL)")
+                name = st.text_input("회사 이름")
+                
+                if st.button("추가"):
+                    try:
+                        add_stock(symbol, name)
+                        st.success(f"{name} ({symbol}) 주식이 추가되었습니다!")
+                    except Exception as e:
+                        st.error(str(e))
+            
+            # Update stock prices
+            if st.button("주가 업데이트"):
+                update_stock_prices()
+                st.success("주가가 업데이트되었습니다!")
     
     # Stock trading interface
     st.subheader("💹 주식 거래")

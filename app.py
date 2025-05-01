@@ -27,7 +27,16 @@ render_login_sidebar()
 header()
 
 # ── 페이지 라우팅 ──────────────────────────────────────
-page = st.sidebar.selectbox("페이지 선택", ["홈", "학급 화폐", "모의 주식"])
+if st.session_state.get('is_logged_in'):
+    with st.sidebar:
+        st.subheader("📱 메뉴")
+        page = st.radio(
+            "페이지 선택",
+            ["홈", "학급 화폐", "모의 주식"],
+            label_visibility="collapsed"
+        )
+else:
+    page = "홈"
 
 if page == "홈":
     st.header("🏠 홈")
