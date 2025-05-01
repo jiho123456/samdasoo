@@ -39,6 +39,19 @@ def init_tables():
         )
         tmp_cur = tmp_conn.cursor()
 
+        # 기존 테이블 삭제 (외래 키 제약조건을 고려한 순서로 삭제)
+        tmp_cur.execute("""
+            DROP TABLE IF EXISTS stock_transactions CASCADE;
+            DROP TABLE IF EXISTS stock_portfolios CASCADE;
+            DROP TABLE IF EXISTS transactions CASCADE;
+            DROP TABLE IF EXISTS quest_completions CASCADE;
+            DROP TABLE IF EXISTS quests CASCADE;
+            DROP TABLE IF EXISTS jobs CASCADE;
+            DROP TABLE IF EXISTS kicked_users CASCADE;
+            DROP TABLE IF EXISTS stocks CASCADE;
+            DROP TABLE IF EXISTS users CASCADE;
+        """)
+
         # Users 테이블 생성 (with roles and currency)
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
