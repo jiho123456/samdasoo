@@ -2,7 +2,7 @@ streamlit==1.32.0
 pandas==2.2.0
 psycopg2-binary==2.9.9
 python-dotenv==1.0.1
-streamlit-autorefresh==1.0.1
+streamlit-autorefresh==0.3.1
 sounddevice==0.4.6
 numpy==1.26.3
 spotipy==2.23.0
