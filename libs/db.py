@@ -39,15 +39,6 @@ def init_tables():
         )
         tmp_cur = tmp_conn.cursor()
 
-        # kicked_users 테이블 생성
-        tmp_cur.execute("""
-            CREATE TABLE IF NOT EXISTS kicked_users (
-                username TEXT PRIMARY KEY,
-                reason   TEXT NOT NULL,
-                kicked_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
         # Users 테이블 생성 (with roles and currency)
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -146,6 +137,15 @@ def init_tables():
                 price DECIMAL(10,2) NOT NULL,
                 total_amount DECIMAL(10,2) NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # kicked_users 테이블 생성 (마지막에 생성)
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS kicked_users (
+                username TEXT PRIMARY KEY,
+                reason   TEXT NOT NULL,
+                kicked_at TIMESTAMPTZ DEFAULT now()
             );
         """)
 
