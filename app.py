@@ -28,11 +28,11 @@ try:
     import psycopg2
     # Get connection parameters from secrets
     conn_params = {
-        "user": st.secrets.get("user", ""),
-        "password": st.secrets.get("password", ""),
-        "host": st.secrets.get("host", ""),
-        "port": st.secrets.get("port", "5432"),
-        "dbname": st.secrets.get("dbname", "")
+        "user": st.secrets["user"],
+        "password": st.secrets["password"],
+        "host": st.secrets["host"],
+        "port": st.secrets["port"],
+        "dbname": st.secrets["dbname"]
     }
     
     # Test the connection directly
