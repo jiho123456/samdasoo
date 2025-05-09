@@ -28,7 +28,7 @@ try:
     cur = conn.cursor()
     
     # Admin dashboard tabs
-    tabs = st.tabs(["사용자 관리", "화폐 시스템", "상점 관리", "블로그 관리", "통계"])
+    tabs = st.tabs(["사용자 관리", "화폐 시스템", "상점 관리", "블로그 관리", "통계", "환불 관리"])
     
     #-----------------------------------------------------------
     # 1. USER MANAGEMENT TAB
@@ -765,6 +765,81 @@ try:
                 st.line_chart(trans_df.set_index("날짜"))
         except:
             st.info("거래 내역이 없습니다.")
+
+    #-----------------------------------------------------------
+    # 6. REFUND MANAGEMENT TAB
+    #-----------------------------------------------------------
+    with tabs[5]:
+        st.header("💸 환불 관리")
+        
+        # Get all user items
+        cur.execute("""
+            SELECT ui.user_item_id, u.username, s.name, s.price, ui.purchased_at
+            FROM user_items ui
+            JOIN users u ON ui.user_id = u.user_id
+            JOIN shop_items s ON ui.item_id = s.item_id
+            WHERE ui.is_active = true
+            ORDER BY ui.purchased_at DESC
+        """)
+        user_items = cur.fetchall()
+        
+        if not user_items:
+            st.info("환불 가능한 아이템이 없습니다.")
+        else:
+            for item in user_items:
+                with st.expander(f"{item[1]} - {item[2]} (구매일: {item[4]})"):
+                    st.write(f"구매 금액: {item[3]}")
+                    
+                    # Refund form
+                    with st.form(f"refund_form_{item[0]}"):
+                        reason = st.text_input("환불 사유", key=f"refund_reason_{item[0]}")
+                        submit = st.form_submit_button("환불 처리")
+                        
+                        if submit:
+                            if reason:
+                                try:
+                                    # Start transaction
+                                    cur.execute("BEGIN")
+                                    
+                                    # Get user_id and item_id
+                                    cur.execute("SELECT user_id, item_id FROM user_items WHERE user_item_id = %s", (item[0],))
+                                    user_item = cur.fetchone()
+                                    
+                                    # Add refund record
+                                    cur.execute("""
+                                        INSERT INTO refunds (user_item_id, user_id, item_id, amount, reason, processed_by)
+                                        VALUES (%s, %s, %s, %s, %s, %s)
+                                    """, (item[0], user_item[0], user_item[1], item[3], reason, user_id))
+                                    
+                                    # Update user's currency
+                                    cur.execute("""
+                                        UPDATE users 
+                                        SET currency = currency + %s 
+                                        WHERE user_id = %s
+                                    """, (item[3], user_item[0]))
+                                    
+                                    # Deactivate user item
+                                    cur.execute("""
+                                        UPDATE user_items 
+                                        SET is_active = false 
+                                        WHERE user_item_id = %s
+                                    """, (item[0],))
+                                    
+                                    # Add transaction record
+                                    cur.execute("""
+                                        INSERT INTO transactions (from_user_id, to_user_id, amount, type, description, created_by)
+                                        VALUES (%s, %s, %s, %s, %s, %s)
+                                    """, (user_id, user_item[0], item[3], 'refund', reason, user_id))
+                                    
+                                    # Commit transaction
+                                    cur.execute("COMMIT")
+                                    st.success(f"{item[2]} 아이템이 환불되었습니다.")
+                                    st.rerun()
+                                except Exception as e:
+                                    cur.execute("ROLLBACK")
+                                    st.error(f"환불 처리 중 오류 발생: {str(e)}")
+                            else:
+                                st.error("환불 사유를 입력해주세요.")
 
 except Exception as e:
     st.error(f"오류가 발생했습니다: {str(e)}")
