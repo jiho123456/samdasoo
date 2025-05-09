@@ -22,26 +22,38 @@ if 'db_initialized' not in st.session_state:
 st_autorefresh(interval=30000, key="global_autorefresh")
 
 # Check if database is properly connected
+db_connected = False
 try:
-    conn = get_conn()
-    cur = conn.cursor()
+    # Get a new connection for this check, don't rely on cached connections
+    import psycopg2
+    # Get connection parameters from secrets
+    conn_params = {
+        "user": st.secrets.get("user", ""),
+        "password": st.secrets.get("password", ""),
+        "host": st.secrets.get("host", ""),
+        "port": st.secrets.get("port", "5432"),
+        "dbname": st.secrets.get("dbname", "")
+    }
     
-    # Simple test query to verify connection
-    cur.execute("SELECT 1")
-    cur.fetchone()
-    
-    cur.close()
-    # Don't close the connection as it's cached by Streamlit
+    # Test the connection directly
+    conn_test = psycopg2.connect(**conn_params)
+    cur_test = conn_test.cursor()
+    cur_test.execute("SELECT 1")
+    cur_test.fetchone()
+    cur_test.close()
+    conn_test.close()
     
     db_connected = True
 except Exception as e:
-    db_connected = False
     st.error(f"Database connection error: {str(e)}")
     st.warning("Please check your database configuration in .streamlit/secrets.toml")
 
 # Render login sidebar only if database is connected
 if db_connected:
-    render_login_sidebar()
+    try:
+        render_login_sidebar()
+    except Exception as e:
+        st.error(f"Login sidebar error: {str(e)}")
 
 # Render header
 header()
@@ -131,18 +143,41 @@ else:
         4. 방화벽 설정을 확인하세요.
         """)
         
-        # Only show the secret configuration form to admins when logged in
-        if st.session_state.get('role') in ['teacher', '제작자'] and st.session_state.logged_in:
-            st.subheader("데이터베이스 설정")
+        # Database connection test form
+        st.subheader("데이터베이스 연결 테스트")
+        
+        with st.form("db_test_form"):
+            db_user = st.text_input("사용자 이름", value=st.secrets.get("user", ""))
+            db_password = st.text_input("비밀번호", type="password", value=st.secrets.get("password", ""))
+            db_host = st.text_input("호스트", value=st.secrets.get("host", ""))
+            db_port = st.text_input("포트", value=st.secrets.get("port", "5432"))
+            db_name = st.text_input("데이터베이스 이름", value=st.secrets.get("dbname", ""))
             
-            with st.form("db_config_form"):
-                db_user = st.text_input("사용자 이름", value=st.secrets.get("user", ""))
-                db_password = st.text_input("비밀번호", type="password", value=st.secrets.get("password", ""))
-                db_host = st.text_input("호스트", value=st.secrets.get("host", ""))
-                db_port = st.text_input("포트", value=st.secrets.get("port", "5432"))
-                db_name = st.text_input("데이터베이스 이름", value=st.secrets.get("dbname", ""))
-                
-                submit = st.form_submit_button("설정 저장")
-                
-                if submit:
-                    st.warning("이 기능은 데모용입니다. 실제로는 서버에서 .streamlit/secrets.toml 파일을 직접 수정해야 합니다.")
+            submit = st.form_submit_button("연결 테스트")
+            
+            if submit:
+                try:
+                    import psycopg2
+                    test_conn = psycopg2.connect(
+                        user=db_user,
+                        password=db_password,
+                        host=db_host,
+                        port=db_port,
+                        dbname=db_name
+                    )
+                    test_cur = test_conn.cursor()
+                    test_cur.execute("SELECT 1")
+                    test_cur.fetchone()
+                    test_cur.close()
+                    test_conn.close()
+                    
+                    st.success("데이터베이스 연결 성공!")
+                    st.info("앱을 새로고침하면 정상적으로 작동할 것입니다.")
+                except Exception as e:
+                    st.error(f"연결 테스트 실패: {str(e)}")
+                    st.info("위 오류 메시지를 확인하고 연결 정보를 수정하세요.")
+        
+        st.markdown("---")
+        st.info("설정을 변경한 후 앱을 다시 시작하세요.")
+        if st.button("앱 새로고침"):
+            st.rerun()
