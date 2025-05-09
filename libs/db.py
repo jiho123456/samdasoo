@@ -178,6 +178,20 @@ def init_tables():
             );
         """)
 
+        # Create refunds table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS refunds (
+                refund_id SERIAL PRIMARY KEY,
+                user_item_id INTEGER REFERENCES user_items(id),
+                user_id INTEGER REFERENCES users(user_id),
+                item_id INTEGER REFERENCES shop_items(item_id),
+                amount INTEGER NOT NULL,
+                reason TEXT,
+                processed_by INTEGER REFERENCES users(user_id),
+                created_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
         tmp_conn.commit()
         st.success("데이터베이스 테이블이 성공적으로 생성되었습니다!")
     except Exception as e:
