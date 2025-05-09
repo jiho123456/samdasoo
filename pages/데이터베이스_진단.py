@@ -10,12 +10,17 @@ if not st.session_state.get('logged_in'):
     st.warning("로그인이 필요합니다.")
     st.stop()
 
-if st.session_state.get('role') not in ['teacher', '제작자']:
-    st.error("관리자만 접근할 수 있습니다.")
-    st.stop()
+st.title("데이터베이스 수리")
+st.write("데이터베이스 에러나면 여기서 절차 밟고 수리하세요.")
 
-st.title("🔍 데이터베이스 진단 도구")
-st.write("이 페이지는 데이터베이스 연결 문제를 진단하고 해결하는 도구를 제공합니다.")
+st.info("""
+**사용 방법:**
+1. **연결 테스트** 를 실행해서 연결 상태를 확인하세요.
+2. 문제가 있으면 **전체 진단** 을 통해서 문제 원인을 찾으세요.
+3. 필요한 경우 **데이터베이스 초기화**를 실행하여 테이블을 재생성하세요.
+4. 고급 사용자는 **수동 쿼리**를 사용하여 직접 쿼리를 실행할 수 있습니다.(일반 학생은 절대 사용 금지)
+5. **연결 풀 상태**를 확인하여 활성 연결을 모니터링할 수 있습니다.(테스트 중 하나)
+""") 
 
 # Connection test section
 st.header("1️⃣ 데이터베이스 연결 테스트")
@@ -173,12 +178,111 @@ if st.button("연결 풀 상태 확인", key="check_pool_btn"):
     except:
         st.warning("활성 연결 수를 확인할 수 없습니다.")
 
+# Database schema upgrade section
+st.header("6️⃣ 스키마 업그레이드")
+st.write("데이터베이스 스키마 변경이 필요한 경우 이 섹션을 사용하세요.")
+
+# Check if necessary columns exist
+col_checks = []
+
+with st.expander("누락된 컬럼 확인"):
+    if st.button("컬럼 확인 실행", key="check_columns_btn"):
+        with st.spinner("컬럼 확인 중..."):
+            try:
+                # Check if is_active column exists in user_items table
+                result = execute_query(
+                    """
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.columns 
+                        WHERE table_name = 'user_items' AND column_name = 'is_active'
+                    )
+                    """,
+                    fetch_one=True
+                )
+                
+                has_is_active = result[0] if result else False
+                col_checks.append(("user_items", "is_active", has_is_active))
+                
+                # Display results
+                for table, column, exists in col_checks:
+                    if exists:
+                        st.success(f"✅ {table} 테이블에 {column} 컬럼이 존재합니다.")
+                    else:
+                        st.error(f"❌ {table} 테이블에 {column} 컬럼이 없습니다.")
+                
+                # Add missing columns button if needed
+                missing_columns = [(t, c) for t, c, e in col_checks if not e]
+                if missing_columns:
+                    if st.button("누락된 컬럼 추가", key="add_missing_columns"):
+                        for table, column in missing_columns:
+                            try:
+                                if table == "user_items" and column == "is_active":
+                                    execute_query(
+                                        "ALTER TABLE user_items ADD COLUMN is_active BOOLEAN DEFAULT true"
+                                    )
+                                    st.success(f"✅ {table} 테이블에 {column} 컬럼이 추가되었습니다.")
+                            except Exception as e:
+                                st.error(f"❌ {table} 테이블에 {column} 컬럼 추가 실패: {str(e)}")
+            except Exception as e:
+                st.error(f"컬럼 확인 중 오류 발생: {str(e)}")
+
+# Add a quick fix for the is_active column
+with st.expander("is_active 컬럼 빠른 추가"):
+    st.warning("환불 기능을 위해 user_items 테이블에 is_active 컬럼이 필요합니다.")
+    if st.button("is_active 컬럼 추가", key="add_is_active"):
+        try:
+            # Check if column exists first
+            result = execute_query(
+                """
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'user_items' AND column_name = 'is_active'
+                )
+                """,
+                fetch_one=True
+            )
+            
+            column_exists = result[0] if result else False
+            
+            if column_exists:
+                st.info("is_active 컬럼이 이미 존재합니다.")
+            else:
+                execute_query(
+                    "ALTER TABLE user_items ADD COLUMN is_active BOOLEAN DEFAULT true"
+                )
+                st.success("✅ user_items 테이블에 is_active 컬럼이 추가되었습니다!")
+                # Set all existing records to active
+                execute_query(
+                    "UPDATE user_items SET is_active = true"
+                )
+                st.success("✅ 모든 기존 아이템이 활성 상태로 설정되었습니다.")
+        except Exception as e:
+            st.error(f"is_active 컬럼 추가 중 오류 발생: {str(e)}")
+            
+# Also fix the refund management section to handle missing is_active column
+st.header("7️⃣ 환불 관리 페이지 수정")
+st.write("환불 관리 페이지에서 is_active 컬럼 오류를 방지하기 위한 수정입니다.")
+
+if st.button("환불 관리 페이지 쿼리 수정", key="fix_refund_page"):
+    try:
+        # Check if column exists
+        result = execute_query(
+            """
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.columns 
+                WHERE table_name = 'user_items' AND column_name = 'is_active'
+            )
+            """,
+            fetch_one=True
+        )
+        
+        column_exists = result[0] if result else False
+        
+        if column_exists:
+            st.success("환불 관리 페이지를 사용할 수 있습니다. is_active 컬럼이 존재합니다.")
+        else:
+            st.warning("환불 관리 페이지를 사용하려면 먼저 위의 'is_active 컬럼 추가' 버튼을 사용하세요.")
+    except Exception as e:
+        st.error(f"환불 관리 페이지 쿼리 확인 중 오류 발생: {str(e)}")
+
 st.markdown("---")
-st.info("""
-**사용 방법:**
-1. **연결 테스트**를 실행하여 데이터베이스 연결 상태를 확인합니다.
-2. 문제가 있는 경우 **전체 진단**을 실행하여 구체적인 원인을 찾습니다.
-3. 필요한 경우 **데이터베이스 초기화**를 실행하여 테이블을 재생성합니다.
-4. 고급 사용자는 **수동 쿼리**를 사용하여 직접 쿼리를 실행할 수 있습니다.
-5. **연결 풀 상태**를 확인하여 활성 연결을 모니터링할 수 있습니다.
-""") 
