@@ -51,3 +51,40 @@ else:
 
 # Streamlit will automatically create navigation for files in the 'pages/' directory.
 # Example: if you have 'pages/currency.py', it will create a 'Currency' page.
+
+# Initialize database tables
+try:
+    init_tables()
+except Exception as e:
+    st.error(f"Database initialization error: {str(e)}")
+
+# Global auto-refresh
+st_autorefresh(interval=30000, key="data_refresh")
+
+# Render login sidebar
+render_login_sidebar()
+
+# Render header
+header()
+
+# Display notices if user is logged in
+if st.session_state.get('logged_in'):
+    render_notices()
+
+# Sidebar for page selection
+if st.session_state.get('logged_in'):
+    st.sidebar.markdown("---")
+    page = st.sidebar.radio(
+        "페이지 선택",
+        ["Home", "Classroom Currency", "Mock Stocks"],
+        label_visibility="collapsed"
+    )
+    
+    # Page routing
+    if page == "Home":
+        st.title("Welcome to the Classroom Currency System!")
+        st.write("Please select a page from the sidebar to get started.")
+    elif page == "Classroom Currency":
+        render_currency_page()
+    elif page == "Mock Stocks":
+        render_stocks_page()

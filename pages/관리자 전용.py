@@ -28,7 +28,7 @@ try:
     cur = conn.cursor()
     
     # Admin dashboard tabs
-    tabs = st.tabs(["사용자 관리", "화폐 시스템", "상점 관리", "블로그 관리", "통계", "환불 관리"])
+    tabs = st.tabs(["사용자 관리", "화폐 시스템", "상점 관리", "블로그 관리", "통계", "환불 관리", "공지 관리"])
     
     #-----------------------------------------------------------
     # 1. USER MANAGEMENT TAB
@@ -774,7 +774,7 @@ try:
         
         # Get all user items
         cur.execute("""
-            SELECT ui.user_item_id, u.username, s.name, s.price, ui.purchased_at
+            SELECT ui.id, u.username, s.name, s.price, ui.purchased_at
             FROM user_items ui
             JOIN users u ON ui.user_id = u.user_id
             JOIN shop_items s ON ui.item_id = s.item_id
@@ -802,7 +802,7 @@ try:
                                     cur.execute("BEGIN")
                                     
                                     # Get user_id and item_id
-                                    cur.execute("SELECT user_id, item_id FROM user_items WHERE user_item_id = %s", (item[0],))
+                                    cur.execute("SELECT user_id, item_id FROM user_items WHERE id = %s", (item[0],))
                                     user_item = cur.fetchone()
                                     
                                     # Add refund record
@@ -822,7 +822,7 @@ try:
                                     cur.execute("""
                                         UPDATE user_items 
                                         SET is_active = false 
-                                        WHERE user_item_id = %s
+                                        WHERE id = %s
                                     """, (item[0],))
                                     
                                     # Add transaction record
@@ -840,6 +840,118 @@ try:
                                     st.error(f"환불 처리 중 오류 발생: {str(e)}")
                             else:
                                 st.error("환불 사유를 입력해주세요.")
+
+    #-----------------------------------------------------------
+    # 7. NOTICE MANAGEMENT TAB
+    #-----------------------------------------------------------
+    with tabs[6]:
+        st.header("📢 공지 관리")
+        
+        # Add new notice
+        st.subheader("새 공지 작성")
+        with st.form("add_notice_form"):
+            notice_title = st.text_input("제목")
+            notice_content = st.text_area("내용")
+            heading_level = st.selectbox("제목 크기", [1, 2, 3, 4, 5, 6], format_func=lambda x: f"H{x}")
+            submit = st.form_submit_button("공지 등록")
+            
+            if submit:
+                if notice_title and notice_content:
+                    conn = get_conn()
+                    cur = conn.cursor()
+                    try:
+                        cur.execute(
+                            """
+                            INSERT INTO notices (title, content, heading_level, created_by)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (notice_title, notice_content, heading_level, user_id)
+                        )
+                        conn.commit()
+                        st.success("공지가 등록되었습니다.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"공지 등록 중 오류 발생: {str(e)}")
+                    finally:
+                        cur.close()
+                        conn.close()
+                else:
+                    st.error("제목과 내용을 모두 입력해주세요.")
+        
+        # List and manage existing notices
+        st.subheader("공지 목록")
+        conn = get_conn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT notice_id, title, content, heading_level, is_active, created_at, updated_at
+            FROM notices
+            ORDER BY created_at DESC
+        """)
+        notices = cur.fetchall()
+        cur.close()
+        conn.close()
+        
+        if not notices:
+            st.info("등록된 공지가 없습니다.")
+        else:
+            for notice in notices:
+                with st.expander(f"{notice[1]} (작성일: {notice[5]})"):
+                    st.write(f"제목 크기: H{notice[3]}")
+                    st.write(f"상태: {'활성' if notice[4] else '비활성'}")
+                    st.write(f"최종 수정일: {notice[6]}")
+                    st.write("내용:")
+                    st.write(notice[2])
+                    
+                    # Edit notice
+                    with st.form(f"edit_notice_{notice[0]}"):
+                        edit_title = st.text_input("제목 수정", value=notice[1], key=f"edit_title_{notice[0]}")
+                        edit_content = st.text_area("내용 수정", value=notice[2], key=f"edit_content_{notice[0]}")
+                        edit_heading = st.selectbox(
+                            "제목 크기 수정",
+                            [1, 2, 3, 4, 5, 6],
+                            index=notice[3]-1,
+                            format_func=lambda x: f"H{x}",
+                            key=f"edit_heading_{notice[0]}"
+                        )
+                        edit_active = st.checkbox("활성화", value=notice[4], key=f"edit_active_{notice[0]}")
+                        submit_edit = st.form_submit_button("수정")
+                        
+                        if submit_edit:
+                            if edit_title and edit_content:
+                                conn = get_conn()
+                                cur = conn.cursor()
+                                try:
+                                    cur.execute(
+                                        """
+                                        UPDATE notices 
+                                        SET title = %s, content = %s, heading_level = %s, 
+                                            is_active = %s, updated_at = CURRENT_TIMESTAMP
+                                        WHERE notice_id = %s
+                                        """,
+                                        (edit_title, edit_content, edit_heading, edit_active, notice[0])
+                                    )
+                                    conn.commit()
+                                    st.success("공지가 수정되었습니다.")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"공지 수정 중 오류 발생: {str(e)}")
+                            else:
+                                st.error("제목과 내용을 모두 입력해주세요.")
+                    
+                    # Delete notice
+                    if st.button("삭제", key=f"delete_notice_{notice[0]}"):
+                        conn = get_conn()
+                        cur = conn.cursor()
+                        try:
+                            cur.execute("DELETE FROM notices WHERE notice_id = %s", (notice[0],))
+                            conn.commit()
+                            st.success("공지가 삭제되었습니다.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"공지 삭제 중 오류 발생: {str(e)}")
+                        finally:
+                            cur.close()
+                            conn.close()
 
 except Exception as e:
     st.error(f"오류가 발생했습니다: {str(e)}")

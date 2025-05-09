@@ -192,6 +192,20 @@ def init_tables():
             );
         """)
 
+        # Create notices table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS notices (
+                notice_id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                heading_level INTEGER NOT NULL CHECK (heading_level BETWEEN 1 AND 6),
+                is_active BOOLEAN DEFAULT true,
+                created_by INTEGER REFERENCES users(user_id),
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now()
+            )
+        """)
+
         tmp_conn.commit()
         st.success("데이터베이스 테이블이 성공적으로 생성되었습니다!")
     except Exception as e:
