@@ -116,11 +116,11 @@ else:
         st.subheader("데이터베이스 연결 테스트")
         
         with st.form("db_test_form"):
-            db_user = st.text_input("사용자 이름", value=st.secrets.get("user", ""))
-            db_password = st.text_input("비밀번호", type="password", value=st.secrets.get("password", ""))
-            db_host = st.text_input("호스트", value=st.secrets.get("host", ""))
-            db_port = st.text_input("포트", value=st.secrets.get("port", "5432"))
-            db_name = st.text_input("데이터베이스 이름", value=st.secrets.get("dbname", ""))
+            db_user = st.text_input("사용자 이름", value=st.secrets["user"])
+            db_password = st.text_input("비밀번호", type="password", value=st.secrets["password"])
+            db_host = st.text_input("호스트", value=st.secrets["host"])
+            db_port = st.text_input("포트", value=st.secrets["port"])
+            db_name = st.text_input("데이터베이스 이름", value=st.secrets["dbname"])
             
             submit = st.form_submit_button("연결 테스트")
             
