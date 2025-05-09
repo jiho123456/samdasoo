@@ -25,24 +25,7 @@ st_autorefresh(interval=30000, key="global_autorefresh")
 db_connected = False
 try:
     # Get a new connection for this check, don't rely on cached connections
-    import psycopg2
-    # Get connection parameters from secrets
-    conn_params = {
-        "user": st.secrets["user"],
-        "password": st.secrets["password"],
-        "host": st.secrets["host"],
-        "port": st.secrets["port"],
-        "dbname": st.secrets["dbname"]
-    }
-    
-    # Test the connection directly
-    conn_test = psycopg2.connect(**conn_params)
-    cur_test = conn_test.cursor()
-    cur_test.execute("SELECT 1")
-    cur_test.fetchone()
-    cur_test.close()
-    conn_test.close()
-    
+    get_conn()
     db_connected = True
 except Exception as e:
     st.error(f"Database connection error: {str(e)}")
