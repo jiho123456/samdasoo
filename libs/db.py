@@ -1,6 +1,7 @@
 # libs/db.py
 import streamlit as st
 import psycopg2
+import psycopg2.errors
 
 @st.cache_resource
 def get_conn():
@@ -41,14 +42,15 @@ def init_tables():
 
         # 기존 테이블 삭제 (외래 키 제약조건을 고려한 순서로 삭제)
         tmp_cur.execute("""
-            DROP TABLE IF EXISTS stock_transactions CASCADE;
-            DROP TABLE IF EXISTS stock_portfolios CASCADE;
+            DROP TABLE IF EXISTS user_items CASCADE;
+            DROP TABLE IF EXISTS shop_items CASCADE;
+            DROP TABLE IF EXISTS blog_posts CASCADE;
+            DROP TABLE IF EXISTS blog_comments CASCADE;
             DROP TABLE IF EXISTS transactions CASCADE;
             DROP TABLE IF EXISTS quest_completions CASCADE;
             DROP TABLE IF EXISTS quests CASCADE;
             DROP TABLE IF EXISTS jobs CASCADE;
             DROP TABLE IF EXISTS kicked_users CASCADE;
-            DROP TABLE IF EXISTS stocks CASCADE;
             DROP TABLE IF EXISTS users CASCADE;
         """)
 
@@ -61,6 +63,8 @@ def init_tables():
                 role TEXT NOT NULL CHECK (role IN ('teacher', 'student', '제작자', '일반학생')),
                 currency INTEGER DEFAULT 0,
                 job_id INTEGER,
+                bio TEXT DEFAULT '',
+                avatar_url TEXT DEFAULT '',
                 created_at TIMESTAMPTZ DEFAULT now()
             );
         """)
@@ -116,50 +120,60 @@ def init_tables():
             );
         """)
 
-        # Stocks 테이블 생성
-        tmp_cur.execute("""
-            CREATE TABLE IF NOT EXISTS stocks (
-                stock_id SERIAL PRIMARY KEY,
-                symbol TEXT NOT NULL,
-                name TEXT NOT NULL,
-                current_price DECIMAL(10,2) NOT NULL,
-                last_updated TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
-        # Stock Portfolios 테이블 생성
-        tmp_cur.execute("""
-            CREATE TABLE IF NOT EXISTS stock_portfolios (
-                portfolio_id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(user_id),
-                stock_id INTEGER REFERENCES stocks(stock_id),
-                quantity INTEGER NOT NULL,
-                average_price DECIMAL(10,2) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT now(),
-                updated_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
-        # Stock Transactions 테이블 생성
-        tmp_cur.execute("""
-            CREATE TABLE IF NOT EXISTS stock_transactions (
-                transaction_id SERIAL PRIMARY KEY,
-                user_id INTEGER REFERENCES users(user_id),
-                stock_id INTEGER REFERENCES stocks(stock_id),
-                type TEXT NOT NULL CHECK (type IN ('buy', 'sell')),
-                quantity INTEGER NOT NULL,
-                price DECIMAL(10,2) NOT NULL,
-                total_amount DECIMAL(10,2) NOT NULL,
-                created_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
         # kicked_users 테이블 생성 (마지막에 생성)
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS kicked_users (
                 username TEXT PRIMARY KEY,
                 reason   TEXT NOT NULL,
                 kicked_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # Shop Items Table (for profile items)
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS shop_items (
+                item_id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('avatar', 'badge', 'background', 'font', 'color')),
+                price INTEGER NOT NULL,
+                image_url TEXT,
+                created_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # User Items Table (inventory of purchased items)
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_items (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                item_id INTEGER REFERENCES shop_items(item_id),
+                is_equipped BOOLEAN DEFAULT false,
+                purchased_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # Blog Posts Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS blog_posts (
+                post_id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                image_urls TEXT[],
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # Blog Comments Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS blog_comments (
+                comment_id SERIAL PRIMARY KEY,
+                post_id INTEGER REFERENCES blog_posts(post_id),
+                user_id INTEGER REFERENCES users(user_id),
+                content TEXT NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT now()
             );
         """)
 

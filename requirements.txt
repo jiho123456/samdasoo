@@ -9,3 +9,4 @@ spotipy==2.23.0
 yfinance==0.2.36
 plotly==5.18.0
 streamlit-extras==0.2.1
+pillow==10.2.0
