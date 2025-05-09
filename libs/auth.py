@@ -103,8 +103,8 @@ def render_login_sidebar():
                         try:
                             cur = conn.cursor()
                             cur.execute(
-                            "INSERT INTO users(username,password,role) "
-                            "VALUES(%s,%s,'일반학생')",
+                            "INSERT INTO users(username, password, role, bio, avatar_url) "
+                            "VALUES(%s, %s, '일반학생', '', '')",
                             (nu, np)
                             )
                             conn.commit()

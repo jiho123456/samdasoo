@@ -38,6 +38,7 @@ def init_tables():
             port=st.secrets["port"],
             dbname=st.secrets["dbname"]
         )
+        tmp_conn.autocommit = True
         tmp_cur = tmp_conn.cursor()
 
         # 기존 테이블 삭제 (외래 키 제약조건을 고려한 순서로 삭제)
@@ -120,15 +121,6 @@ def init_tables():
             );
         """)
 
-        # kicked_users 테이블 생성 (마지막에 생성)
-        tmp_cur.execute("""
-            CREATE TABLE IF NOT EXISTS kicked_users (
-                username TEXT PRIMARY KEY,
-                reason   TEXT NOT NULL,
-                kicked_at TIMESTAMPTZ DEFAULT now()
-            );
-        """)
-
         # Shop Items Table (for profile items)
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
@@ -160,7 +152,7 @@ def init_tables():
                 user_id INTEGER REFERENCES users(user_id),
                 title TEXT NOT NULL,
                 content TEXT NOT NULL,
-                image_urls TEXT[],
+                image_urls TEXT,
                 created_at TIMESTAMPTZ DEFAULT now(),
                 updated_at TIMESTAMPTZ DEFAULT now()
             );
@@ -174,6 +166,15 @@ def init_tables():
                 user_id INTEGER REFERENCES users(user_id),
                 content TEXT NOT NULL,
                 created_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+
+        # kicked_users 테이블 생성 (마지막에 생성)
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS kicked_users (
+                username TEXT PRIMARY KEY,
+                reason   TEXT NOT NULL,
+                kicked_at TIMESTAMPTZ DEFAULT now()
             );
         """)
 

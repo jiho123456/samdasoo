@@ -24,7 +24,14 @@ try:
     
     # Get user information
     cur.execute("""
-        SELECT username, role, currency, bio, avatar_url, job_id
+        SELECT username, role, currency, 
+               CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name = 'users' AND column_name = 'bio')
+                    THEN bio ELSE '' END as bio,
+               CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns 
+                               WHERE table_name = 'users' AND column_name = 'avatar_url')
+                    THEN avatar_url ELSE '' END as avatar_url,
+               job_id
         FROM users 
         WHERE user_id = %s
     """, (user_id,))

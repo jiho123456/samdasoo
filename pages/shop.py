@@ -23,6 +23,19 @@ try:
     balance = get_user_currency(user_id)
     st.metric("내 잔고", f"{balance:,}원")
     
+    # Check if shop_items table exists
+    cur.execute("""
+        SELECT EXISTS (
+            SELECT 1 FROM information_schema.tables 
+            WHERE table_name = 'shop_items'
+        )
+    """)
+    
+    table_exists = cur.fetchone()[0]
+    if not table_exists:
+        st.warning("상점 시스템이 아직 준비되지 않았습니다. 데이터베이스 초기화가 필요합니다.")
+        st.stop()
+    
     # Initialize the shop with default items if none exist
     cur.execute("SELECT COUNT(*) FROM shop_items")
     if cur.fetchone()[0] == 0:

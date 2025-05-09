@@ -66,7 +66,7 @@ try:
                         INSERT INTO blog_posts (user_id, title, content, image_urls)
                         VALUES (%s, %s, %s, %s)
                         RETURNING post_id
-                    """, (user_id, post_title, post_content, image_urls if image_urls else None))
+                    """, (user_id, post_title, post_content, json.dumps(image_urls) if image_urls else None))
                     
                     post_id = cur.fetchone()[0]
                     conn.commit()
@@ -93,7 +93,10 @@ try:
     if not posts:
         st.info("아직 게시글이 없습니다. 첫 번째 글을 작성해보세요!")
     else:
-        for post_id, title, content, image_urls, created_at, author, author_role in posts:
+        for post_id, title, content, image_urls_json, created_at, author, author_role in posts:
+            # Parse image_urls from JSON
+            image_urls = json.loads(image_urls_json) if image_urls_json else []
+            
             with st.expander(f"{title} - by {author} ({created_at.strftime('%Y-%m-%d %H:%M')})"):
                 st.write(content)
                 
@@ -155,7 +158,7 @@ try:
                 # Delete post option (only for author or teacher)
                 cur.execute("SELECT user_id FROM blog_posts WHERE post_id = %s", (post_id,))
                 post_author_id = cur.fetchone()[0]
-                if user_id == post_author_id or role in ['teacher', '제작자']:
+                if user_id == post_author_id or st.session_state.get('role') in ['teacher', '제작자']:
                     if st.button(f"게시글 삭제", key=f"delete_{post_id}"):
                         try:
                             # Delete comments first
