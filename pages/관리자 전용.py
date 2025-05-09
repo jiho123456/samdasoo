@@ -53,7 +53,7 @@ try:
         
         # Role filter
         roles = ["모두 보기"] + sorted(users_df["역할"].unique().tolist())
-        selected_role = st.selectbox("역할별 필터링", roles)
+        selected_role = st.selectbox("역할별 필터링", roles, key="user_role_filter")
         
         if selected_role != "모두 보기":
             filtered_df = users_df[users_df["역할"] == selected_role]
@@ -69,8 +69,8 @@ try:
         # 1. Change user role
         with st.expander("역할 변경"):
             user_list = {row["사용자명"]: row["ID"] for _, row in users_df.iterrows()}
-            selected_user = st.selectbox("사용자 선택", list(user_list.keys()))
-            new_role = st.selectbox("새 역할", ["student", "teacher", "일반학생", "제작자"])
+            selected_user = st.selectbox("사용자 선택", list(user_list.keys()), key="role_change_user")
+            new_role = st.selectbox("새 역할", ["student", "teacher", "일반학생", "제작자"], key="new_role_select")
             
             if st.button("역할 변경"):
                 try:
@@ -187,7 +187,7 @@ try:
             
             # Filter options
             transaction_types = ["모두 보기"] + sorted(transactions_df["유형"].unique().tolist())
-            selected_type = st.selectbox("거래 유형 필터링", transaction_types)
+            selected_type = st.selectbox("거래 유형 필터링", transaction_types, key="transaction_type_filter")
             
             if selected_type != "모두 보기":
                 filtered_transactions = transactions_df[transactions_df["유형"] == selected_type]
@@ -234,9 +234,9 @@ try:
             
             # Add new job
             with st.expander("새 직업 추가"):
-                job_name = st.text_input("직업명")
-                salary = st.number_input("급여", min_value=1, step=100)
-                description = st.text_area("설명")
+                job_name = st.text_input("직업명", key="new_job_name")
+                salary = st.number_input("급여", min_value=1, step=100, key="new_job_salary")
+                description = st.text_area("설명", key="new_job_description")
                 
                 if st.button("직업 추가"):
                     try:
@@ -263,8 +263,8 @@ try:
                 cur.execute("SELECT user_id, username FROM users WHERE role IN ('student', '일반학생')")
                 student_options = {row[1]: row[0] for row in cur.fetchall()}
                 
-                selected_job = st.selectbox("직업 선택", list(job_options.keys()))
-                selected_student = st.selectbox("학생 선택", list(student_options.keys()))
+                selected_job = st.selectbox("직업 선택", list(job_options.keys()), key="job_assign_select")
+                selected_student = st.selectbox("학생 선택", list(student_options.keys()), key="job_student_select")
                 
                 if st.button("배정"):
                     try:
@@ -350,7 +350,7 @@ try:
             
             # Filter by type
             item_types = ["모두 보기"] + sorted(items_df["유형"].unique().tolist())
-            selected_type = st.selectbox("아이템 유형 필터링", item_types)
+            selected_type = st.selectbox("아이템 유형 필터링", item_types, key="item_type_filter")
             
             if selected_type != "모두 보기":
                 filtered_items = items_df[items_df["유형"] == selected_type]
@@ -365,13 +365,14 @@ try:
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    new_name = st.text_input("아이템 이름")
-                    new_description = st.text_area("아이템 설명")
-                    new_price = st.number_input("가격", min_value=1, step=10)
+                    new_name = st.text_input("아이템 이름", key="new_item_name")
+                    new_description = st.text_area("아이템 설명", key="new_item_description")
+                    new_price = st.number_input("가격", min_value=1, step=10, key="new_item_price")
                 
                 with col2:
                     new_type = st.selectbox("아이템 유형", 
                                            ["avatar", "badge", "background", "font", "color"],
+                                           key="new_item_type",
                                            format_func=lambda x: {
                                                "avatar": "아바타",
                                                "badge": "배지",
@@ -381,12 +382,12 @@ try:
                                            }.get(x, x))
                     
                     # Two options for image upload
-                    upload_method = st.radio("이미지 업로드 방식", ["URL 입력", "파일 업로드"])
+                    upload_method = st.radio("이미지 업로드 방식", ["URL 입력", "파일 업로드"], key="new_item_upload_method")
                     
                     if upload_method == "URL 입력":
-                        new_image_url = st.text_input("이미지 URL")
+                        new_image_url = st.text_input("이미지 URL", key="new_item_url")
                     else:
-                        uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"])
+                        uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"], key="new_item_file")
                         new_image_url = None
                         
                         if uploaded_file:
@@ -425,7 +426,7 @@ try:
                 cur.execute("SELECT item_id, name, type FROM shop_items ORDER BY type, name")
                 item_options = {f"{row[1]} ({row[2]})": row[0] for row in cur.fetchall()}
                 
-                selected_item = st.selectbox("아이템 선택", list(item_options.keys()))
+                selected_item = st.selectbox("아이템 선택", list(item_options.keys()), key="edit_item_select")
                 item_id = item_options[selected_item]
                 
                 # Get item details
@@ -440,14 +441,15 @@ try:
                     col1, col2 = st.columns(2)
                     
                     with col1:
-                        edit_name = st.text_input("아이템 이름", value=name)
-                        edit_description = st.text_area("아이템 설명", value=description)
-                        edit_price = st.number_input("가격", min_value=1, step=10, value=price)
+                        edit_name = st.text_input("아이템 이름", value=name, key="edit_item_name")
+                        edit_description = st.text_area("아이템 설명", value=description, key="edit_item_description")
+                        edit_price = st.number_input("가격", min_value=1, step=10, value=price, key="edit_item_price")
                     
                     with col2:
                         edit_type = st.selectbox("아이템 유형", 
                                                ["avatar", "badge", "background", "font", "color"],
                                                index=["avatar", "badge", "background", "font", "color"].index(type_),
+                                               key="edit_item_type",
                                                format_func=lambda x: {
                                                    "avatar": "아바타",
                                                    "badge": "배지",
@@ -460,15 +462,15 @@ try:
                         st.image(image_url, width=150)
                         
                         # Keep or change image
-                        change_image = st.checkbox("이미지 변경")
+                        change_image = st.checkbox("이미지 변경", key="edit_change_image")
                         
                         if change_image:
-                            upload_method = st.radio("새 이미지 업로드 방식", ["URL 입력", "파일 업로드"], key="edit_upload")
+                            upload_method = st.radio("새 이미지 업로드 방식", ["URL 입력", "파일 업로드"], key="edit_item_upload_method")
                             
                             if upload_method == "URL 입력":
-                                edit_image_url = st.text_input("이미지 URL", value=image_url)
+                                edit_image_url = st.text_input("이미지 URL", value=image_url, key="edit_item_url")
                             else:
-                                uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"], key="edit_file")
+                                uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"], key="edit_item_file")
                                 edit_image_url = image_url
                                 
                                 if uploaded_file:
@@ -504,7 +506,7 @@ try:
                                 st.error(f"오류가 발생했습니다: {str(e)}")
                     
                     with col2:
-                        delete_confirm = st.checkbox(f"'{name}' 아이템을 정말로 삭제하시겠습니까?")
+                        delete_confirm = st.checkbox(f"'{name}' 아이템을 정말로 삭제하시겠습니까?", key=f"delete_item_confirm_{item_id}")
                         if st.button("아이템 삭제") and delete_confirm:
                             try:
                                 # First delete from user_items
@@ -559,7 +561,7 @@ try:
                 
                 # Filter options
                 author_filter = ["모두 보기"] + sorted(posts_df["작성자"].unique().tolist())
-                selected_author = st.selectbox("작성자별 필터링", author_filter)
+                selected_author = st.selectbox("작성자별 필터링", author_filter, key="blog_author_filter")
                 
                 if selected_author != "모두 보기":
                     filtered_posts = posts_df[posts_df["작성자"] == selected_author]
@@ -582,7 +584,7 @@ try:
                     posts = cur.fetchall()
                     post_options = {f"{row[1]} (by {row[2]} - {row[3].strftime('%Y-%m-%d')})": row[0] for row in posts}
                     
-                    selected_post = st.selectbox("게시글 선택", list(post_options.keys()))
+                    selected_post = st.selectbox("게시글 선택", list(post_options.keys()), key="blog_post_select")
                     post_id = post_options[selected_post]
                     
                     # Get post details
@@ -647,7 +649,7 @@ try:
                                         st.error(f"오류가 발생했습니다: {str(e)}")
                         
                         # Delete post option
-                        delete_confirm = st.checkbox(f"'{title}' 게시글을 정말로 삭제하시겠습니까?")
+                        delete_confirm = st.checkbox(f"'{title}' 게시글을 정말로 삭제하시겠습니까?", key=f"delete_post_confirm_{post_id}")
                         if st.button("게시글 삭제") and delete_confirm:
                             try:
                                 # Delete comments first
