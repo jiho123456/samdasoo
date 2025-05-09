@@ -1,224 +1,769 @@
-# pages/08_moderator.py
 import streamlit as st
 from libs.db import get_conn
-from libs.ui_helpers import header
+import pandas as pd
+from datetime import datetime
+import json
+import base64
+from io import BytesIO
+from PIL import Image
 
-conn = get_conn()
-cur = conn.cursor()
+st.title("🔧 관리자 페이지")
 
-header()
-st.header("🔧 운영진 페이지")
-
-# 접근 권한 체크
-if st.session_state.role not in ["제작자", "반장", "부반장"]:
-    st.error("🔒 접근 권한이 없습니다.")
+# Check if user is logged in and has admin privileges
+if not st.session_state.get('logged_in'):
+    st.warning("로그인이 필요합니다.")
     st.stop()
 
-# 1) 유저 관리: 역할 변경 + 강제 탈퇴
-st.subheader("👤 사용자 관리")
-cur.execute("SELECT id, username, role FROM users ORDER BY id")
-for uid, un, ur in cur.fetchall():
-    col1, col2, col3 = st.columns([0.6, 0.2, 0.2])
-    col1.write(f"**{un}**  (역할: {ur})")
+if st.session_state.get('role') not in ['teacher', '제작자']:
+    st.error("관리자 권한이 필요합니다.")
+    st.stop()
 
-    # 역할 변경 (제작자만)
-    if st.session_state.role == "제작자":
-        roles = ["제작자", "관리자", "반장", "부반장", "일반학생"]
-        idx = roles.index(ur) if ur in roles else len(roles)-1
-        new_role = col2.selectbox(
-            "", roles, index=idx, key=f"role_{uid}"
-        )
-        if col2.button("변경", key=f"chg_{uid}"):
-            cur.execute(
-                "UPDATE users SET role=%s WHERE id=%s",
-                (new_role, uid)
-            )
-            conn.commit()
-            st.success(f"{un}님의 역할을 **{new_role}**(으)로 변경했습니다.")
-            st.rerun()
-    else:
-        col2.write("변경 불가")
+user_id = st.session_state.get('user_id')
+if not user_id:
+    st.warning("로그인이 필요합니다.")
+    st.stop()
 
-    # 강제 탈퇴 (킥)
-    if st.session_state.role == "제작자":
-        with col3.expander("킥하기"):
-            reason = st.text_input(
-                "사유 입력", key=f"kick_reason_{uid}"
+try:
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    # Admin dashboard tabs
+    tabs = st.tabs(["사용자 관리", "화폐 시스템", "상점 관리", "블로그 관리", "통계"])
+    
+    #-----------------------------------------------------------
+    # 1. USER MANAGEMENT TAB
+    #-----------------------------------------------------------
+    with tabs[0]:
+        st.header("👥 사용자 관리")
+        
+        # Get all users
+        cur.execute("""
+            SELECT user_id, username, role, currency, 
+                   CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns 
+                                  WHERE table_name = 'users' AND column_name = 'bio')
+                        THEN bio ELSE '' END as bio,
+                   created_at 
+            FROM users
+            ORDER BY role, username
+        """)
+        users = cur.fetchall()
+        
+        # Convert to DataFrame for easier display
+        users_df = pd.DataFrame(users, columns=["ID", "사용자명", "역할", "잔고", "소개", "가입일"])
+        
+        # Role filter
+        roles = ["모두 보기"] + sorted(users_df["역할"].unique().tolist())
+        selected_role = st.selectbox("역할별 필터링", roles)
+        
+        if selected_role != "모두 보기":
+            filtered_df = users_df[users_df["역할"] == selected_role]
+        else:
+            filtered_df = users_df
+        
+        # Display users
+        st.dataframe(filtered_df)
+        
+        # User management actions
+        st.subheader("🛠️ 사용자 작업")
+        
+        # 1. Change user role
+        with st.expander("역할 변경"):
+            user_list = {row["사용자명"]: row["ID"] for _, row in users_df.iterrows()}
+            selected_user = st.selectbox("사용자 선택", list(user_list.keys()))
+            new_role = st.selectbox("새 역할", ["student", "teacher", "일반학생", "제작자"])
+            
+            if st.button("역할 변경"):
+                try:
+                    cur.execute(
+                        "UPDATE users SET role = %s WHERE user_id = %s",
+                        (new_role, user_list[selected_user])
+                    )
+                    conn.commit()
+                    st.success(f"{selected_user}의 역할이 {new_role}로 변경되었습니다!")
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"오류가 발생했습니다: {str(e)}")
+        
+        # 2. Add currency to user
+        with st.expander("화폐 추가/차감"):
+            selected_user2 = st.selectbox("사용자 선택", list(user_list.keys()), key="currency_user")
+            amount = st.number_input("금액 (차감시 음수 입력)", step=100)
+            reason = st.text_input("사유")
+            
+            if st.button("적용"):
+                try:
+                    # Update user currency
+                    cur.execute(
+                        "UPDATE users SET currency = currency + %s WHERE user_id = %s",
+                        (amount, user_list[selected_user2])
+                    )
+                    
+                    # Record transaction
+                    transaction_type = "transfer"
+                    if amount > 0:
+                        cur.execute(
+                            """
+                            INSERT INTO transactions 
+                            (from_user_id, to_user_id, amount, type, description, created_by)
+                            VALUES (NULL, %s, %s, %s, %s, %s)
+                            """,
+                            (user_list[selected_user2], amount, transaction_type, f"관리자: {reason}", user_id)
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            INSERT INTO transactions 
+                            (from_user_id, to_user_id, amount, type, description, created_by)
+                            VALUES (%s, NULL, %s, %s, %s, %s)
+                            """,
+                            (user_list[selected_user2], abs(amount), transaction_type, f"관리자: {reason}", user_id)
+                        )
+                    
+                    conn.commit()
+                    st.success(f"{selected_user2}의 잔고가 {amount:+,}원 변경되었습니다!")
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"오류가 발생했습니다: {str(e)}")
+        
+        # 3. Delete user
+        with st.expander("사용자 삭제"):
+            selected_user3 = st.selectbox("사용자 선택", list(user_list.keys()), key="delete_user")
+            reason = st.text_input("삭제 사유", key="delete_reason")
+            confirm = st.checkbox(f"정말로 {selected_user3} 사용자를 삭제하시겠습니까?")
+            
+            if st.button("삭제") and confirm:
+                try:
+                    # First add to kicked_users
+                    cur.execute(
+                        "INSERT INTO kicked_users (username, reason) VALUES (%s, %s)",
+                        (selected_user3, reason)
+                    )
+                    
+                    # Now delete the user
+                    cur.execute("DELETE FROM users WHERE user_id = %s", (user_list[selected_user3],))
+                    
+                    conn.commit()
+                    st.success(f"{selected_user3} 사용자가 삭제되었습니다.")
+                except Exception as e:
+                    conn.rollback()
+                    st.error(f"오류가 발생했습니다: {str(e)}")
+    
+    #-----------------------------------------------------------
+    # 2. CURRENCY SYSTEM TAB
+    #-----------------------------------------------------------
+    with tabs[1]:
+        st.header("💰 화폐 시스템")
+        
+        # Transaction history
+        st.subheader("📝 거래 내역")
+        
+        # Check if transactions table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'transactions'
             )
-            if st.button("강제 탈퇴", key=f"kick_{uid}"):
-                # kicked_users에 기록
-                cur.execute(
-                    """
-                    INSERT INTO kicked_users(username, reason)
-                    VALUES(%s, %s)
-                    ON CONFLICT(username) DO UPDATE
-                      SET reason=EXCLUDED.reason,
-                          kicked_at=NOW()
-                    """,
-                    (un, reason)
-                )
-                # users에서 삭제
-                cur.execute(
-                    "DELETE FROM users WHERE username=%s",
-                    (un,)
-                )
+        """)
+        
+        if cur.fetchone()[0]:
+            # Get transactions
+            cur.execute("""
+                SELECT t.transaction_id, 
+                       COALESCE(u1.username, '시스템') as from_user, 
+                       COALESCE(u2.username, '시스템') as to_user, 
+                       t.amount, t.type, t.description, t.created_at
+                FROM transactions t
+                LEFT JOIN users u1 ON t.from_user_id = u1.user_id
+                LEFT JOIN users u2 ON t.to_user_id = u2.user_id
+                ORDER BY t.created_at DESC
+                LIMIT 100
+            """)
+            
+            transactions = cur.fetchall()
+            transactions_df = pd.DataFrame(
+                transactions, 
+                columns=["ID", "보낸 사람", "받은 사람", "금액", "유형", "설명", "시간"]
+            )
+            
+            # Filter options
+            transaction_types = ["모두 보기"] + sorted(transactions_df["유형"].unique().tolist())
+            selected_type = st.selectbox("거래 유형 필터링", transaction_types)
+            
+            if selected_type != "모두 보기":
+                filtered_transactions = transactions_df[transactions_df["유형"] == selected_type]
+            else:
+                filtered_transactions = transactions_df
+            
+            # Display transactions
+            st.dataframe(filtered_transactions)
+        else:
+            st.info("거래 내역이 없습니다.")
+        
+        # Jobs management
+        st.subheader("💼 직업 관리")
+        
+        # Check if jobs table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'jobs'
+            )
+        """)
+        
+        if cur.fetchone()[0]:
+            # Get jobs
+            cur.execute("""
+                SELECT j.job_id, j.name, j.salary, j.description,
+                       u.username as created_by, j.created_at,
+                       COUNT(u2.user_id) as assigned_users
+                FROM jobs j
+                LEFT JOIN users u ON j.created_by = u.user_id
+                LEFT JOIN users u2 ON u2.job_id = j.job_id
+                GROUP BY j.job_id, j.name, j.salary, j.description, u.username, j.created_at
+                ORDER BY j.name
+            """)
+            
+            jobs = cur.fetchall()
+            jobs_df = pd.DataFrame(
+                jobs,
+                columns=["ID", "직업명", "급여", "설명", "생성자", "생성일", "배정된 학생 수"]
+            )
+            
+            # Display jobs
+            st.dataframe(jobs_df)
+            
+            # Add new job
+            with st.expander("새 직업 추가"):
+                job_name = st.text_input("직업명")
+                salary = st.number_input("급여", min_value=1, step=100)
+                description = st.text_area("설명")
+                
+                if st.button("직업 추가"):
+                    try:
+                        cur.execute(
+                            """
+                            INSERT INTO jobs (name, salary, description, created_by)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (job_name, salary, description, user_id)
+                        )
+                        conn.commit()
+                        st.success(f"'{job_name}' 직업이 추가되었습니다!")
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"오류가 발생했습니다: {str(e)}")
+            
+            # Assign job to user
+            with st.expander("직업 배정"):
+                # Get all jobs
+                cur.execute("SELECT job_id, name FROM jobs")
+                job_options = {row[1]: row[0] for row in cur.fetchall()}
+                
+                # Get all students
+                cur.execute("SELECT user_id, username FROM users WHERE role IN ('student', '일반학생')")
+                student_options = {row[1]: row[0] for row in cur.fetchall()}
+                
+                selected_job = st.selectbox("직업 선택", list(job_options.keys()))
+                selected_student = st.selectbox("학생 선택", list(student_options.keys()))
+                
+                if st.button("배정"):
+                    try:
+                        cur.execute(
+                            "UPDATE users SET job_id = %s WHERE user_id = %s",
+                            (job_options[selected_job], student_options[selected_student])
+                        )
+                        conn.commit()
+                        st.success(f"{selected_student}에게 {selected_job} 직업이 배정되었습니다!")
+                    except Exception as e:
+                        conn.rollback()
+                        st.error(f"오류가 발생했습니다: {str(e)}")
+        else:
+            st.info("직업 정보가 없습니다.")
+        
+        # Process monthly salaries
+        st.subheader("💸 월급 처리")
+        if st.button("월급 지급 처리"):
+            try:
+                # Get all users with jobs
+                cur.execute("""
+                    SELECT u.user_id, u.username, j.job_id, j.name, j.salary
+                    FROM users u
+                    JOIN jobs j ON u.job_id = j.job_id
+                """)
+                
+                users_with_jobs = cur.fetchall()
+                
+                for user_id, username, job_id, job_name, salary in users_with_jobs:
+                    # Add salary to user
+                    cur.execute(
+                        "UPDATE users SET currency = currency + %s WHERE user_id = %s",
+                        (salary, user_id)
+                    )
+                    
+                    # Record transaction
+                    cur.execute(
+                        """
+                        INSERT INTO transactions 
+                        (from_user_id, to_user_id, amount, type, description, created_by)
+                        VALUES (NULL, %s, %s, %s, %s, %s)
+                        """,
+                        (user_id, salary, "salary", f"{job_name} 월급", user_id)
+                    )
+                
                 conn.commit()
-                st.success(f"{un}님을 강제 탈퇴했습니다.\n사유: {reason}")
-                st.rerun()
-    else:
-        col3.write("권한 없음")
+                st.success(f"{len(users_with_jobs)}명의 사용자에게 월급이 지급되었습니다!")
+            except Exception as e:
+                conn.rollback()
+                st.error(f"오류가 발생했습니다: {str(e)}")
+    
+    #-----------------------------------------------------------
+    # 3. SHOP MANAGEMENT TAB
+    #-----------------------------------------------------------
+    with tabs[2]:
+        st.header("🛒 상점 관리")
+        
+        # Check if shop_items table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'shop_items'
+            )
+        """)
+        
+        shop_exists = cur.fetchone()[0]
+        
+        if not shop_exists:
+            st.warning("상점 시스템이 초기화되지 않았습니다. 데이터베이스 초기화가 필요합니다.")
+        else:
+            # Get all shop items
+            cur.execute("""
+                SELECT item_id, name, description, type, price, image_url, created_at
+                FROM shop_items
+                ORDER BY type, name
+            """)
+            
+            items = cur.fetchall()
+            items_df = pd.DataFrame(
+                items,
+                columns=["ID", "아이템명", "설명", "유형", "가격", "이미지 URL", "생성일"]
+            )
+            
+            # Filter by type
+            item_types = ["모두 보기"] + sorted(items_df["유형"].unique().tolist())
+            selected_type = st.selectbox("아이템 유형 필터링", item_types)
+            
+            if selected_type != "모두 보기":
+                filtered_items = items_df[items_df["유형"] == selected_type]
+            else:
+                filtered_items = items_df
+            
+            # Display items
+            st.dataframe(filtered_items)
+            
+            # Add new item
+            with st.expander("새 아이템 추가"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    new_name = st.text_input("아이템 이름")
+                    new_description = st.text_area("아이템 설명")
+                    new_price = st.number_input("가격", min_value=1, step=10)
+                
+                with col2:
+                    new_type = st.selectbox("아이템 유형", 
+                                           ["avatar", "badge", "background", "font", "color"],
+                                           format_func=lambda x: {
+                                               "avatar": "아바타",
+                                               "badge": "배지",
+                                               "background": "배경",
+                                               "font": "폰트",
+                                               "color": "색상"
+                                           }.get(x, x))
+                    
+                    # Two options for image upload
+                    upload_method = st.radio("이미지 업로드 방식", ["URL 입력", "파일 업로드"])
+                    
+                    if upload_method == "URL 입력":
+                        new_image_url = st.text_input("이미지 URL")
+                    else:
+                        uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"])
+                        new_image_url = None
+                        
+                        if uploaded_file:
+                            # Convert to base64
+                            image = Image.open(uploaded_file)
+                            # Resize if needed
+                            if max(image.size) > 400:
+                                image.thumbnail((400, 400))
+                            buffered = BytesIO()
+                            image.save(buffered, format="PNG")
+                            img_str = base64.b64encode(buffered.getvalue()).decode()
+                            new_image_url = f"data:image/png;base64,{img_str}"
+                            st.image(new_image_url, width=150)
+                
+                if st.button("아이템 추가"):
+                    if new_name and new_description and new_price > 0 and new_image_url:
+                        try:
+                            cur.execute(
+                                """
+                                INSERT INTO shop_items (name, description, type, price, image_url)
+                                VALUES (%s, %s, %s, %s, %s)
+                                """,
+                                (new_name, new_description, new_type, new_price, new_image_url)
+                            )
+                            conn.commit()
+                            st.success(f"'{new_name}' 아이템이 추가되었습니다!")
+                        except Exception as e:
+                            conn.rollback()
+                            st.error(f"오류가 발생했습니다: {str(e)}")
+                    else:
+                        st.error("모든 필드를 입력해주세요.")
+            
+            # Edit/Delete item
+            with st.expander("아이템 수정/삭제"):
+                # Get all items
+                cur.execute("SELECT item_id, name, type FROM shop_items ORDER BY type, name")
+                item_options = {f"{row[1]} ({row[2]})": row[0] for row in cur.fetchall()}
+                
+                selected_item = st.selectbox("아이템 선택", list(item_options.keys()))
+                item_id = item_options[selected_item]
+                
+                # Get item details
+                cur.execute(
+                    "SELECT name, description, type, price, image_url FROM shop_items WHERE item_id = %s",
+                    (item_id,)
+                )
+                item = cur.fetchone()
+                if item:
+                    name, description, type_, price, image_url = item
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        edit_name = st.text_input("아이템 이름", value=name)
+                        edit_description = st.text_area("아이템 설명", value=description)
+                        edit_price = st.number_input("가격", min_value=1, step=10, value=price)
+                    
+                    with col2:
+                        edit_type = st.selectbox("아이템 유형", 
+                                               ["avatar", "badge", "background", "font", "color"],
+                                               index=["avatar", "badge", "background", "font", "color"].index(type_),
+                                               format_func=lambda x: {
+                                                   "avatar": "아바타",
+                                                   "badge": "배지",
+                                                   "background": "배경",
+                                                   "font": "폰트",
+                                                   "color": "색상"
+                                               }.get(x, x))
+                        
+                        st.write("현재 이미지:")
+                        st.image(image_url, width=150)
+                        
+                        # Keep or change image
+                        change_image = st.checkbox("이미지 변경")
+                        
+                        if change_image:
+                            upload_method = st.radio("새 이미지 업로드 방식", ["URL 입력", "파일 업로드"], key="edit_upload")
+                            
+                            if upload_method == "URL 입력":
+                                edit_image_url = st.text_input("이미지 URL", value=image_url)
+                            else:
+                                uploaded_file = st.file_uploader("이미지 파일", type=["jpg", "jpeg", "png"], key="edit_file")
+                                edit_image_url = image_url
+                                
+                                if uploaded_file:
+                                    # Convert to base64
+                                    image = Image.open(uploaded_file)
+                                    # Resize if needed
+                                    if max(image.size) > 400:
+                                        image.thumbnail((400, 400))
+                                    buffered = BytesIO()
+                                    image.save(buffered, format="PNG")
+                                    img_str = base64.b64encode(buffered.getvalue()).decode()
+                                    edit_image_url = f"data:image/png;base64,{img_str}"
+                                    st.image(edit_image_url, width=150)
+                        else:
+                            edit_image_url = image_url
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("아이템 수정"):
+                            try:
+                                cur.execute(
+                                    """
+                                    UPDATE shop_items 
+                                    SET name = %s, description = %s, type = %s, price = %s, image_url = %s
+                                    WHERE item_id = %s
+                                    """,
+                                    (edit_name, edit_description, edit_type, edit_price, edit_image_url, item_id)
+                                )
+                                conn.commit()
+                                st.success(f"'{edit_name}' 아이템이 수정되었습니다!")
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"오류가 발생했습니다: {str(e)}")
+                    
+                    with col2:
+                        delete_confirm = st.checkbox(f"'{name}' 아이템을 정말로 삭제하시겠습니까?")
+                        if st.button("아이템 삭제") and delete_confirm:
+                            try:
+                                # First delete from user_items
+                                cur.execute("DELETE FROM user_items WHERE item_id = %s", (item_id,))
+                                
+                                # Then delete the item
+                                cur.execute("DELETE FROM shop_items WHERE item_id = %s", (item_id,))
+                                
+                                conn.commit()
+                                st.success(f"'{name}' 아이템이 삭제되었습니다!")
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"오류가 발생했습니다: {str(e)}")
+    
+    #-----------------------------------------------------------
+    # 4. BLOG MANAGEMENT TAB
+    #-----------------------------------------------------------
+    with tabs[3]:
+        st.header("📝 블로그 관리")
+        
+        # Check if blog_posts table exists
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_name = 'blog_posts'
+            )
+        """)
+        
+        blog_exists = cur.fetchone()[0]
+        
+        if not blog_exists:
+            st.warning("블로그 시스템이 초기화되지 않았습니다. 데이터베이스 초기화가 필요합니다.")
+        else:
+            # Get all posts with author info
+            cur.execute("""
+                SELECT p.post_id, p.title, 
+                       CASE WHEN LENGTH(p.content) > 50 THEN SUBSTRING(p.content, 1, 50) || '...' ELSE p.content END,
+                       u.username, p.created_at, 
+                       (SELECT COUNT(*) FROM blog_comments WHERE post_id = p.post_id) AS comment_count
+                FROM blog_posts p
+                JOIN users u ON p.user_id = u.user_id
+                ORDER BY p.created_at DESC
+            """)
+            
+            posts = cur.fetchall()
+            
+            if posts:
+                posts_df = pd.DataFrame(
+                    posts,
+                    columns=["ID", "제목", "내용", "작성자", "작성일", "댓글 수"]
+                )
+                
+                # Filter options
+                author_filter = ["모두 보기"] + sorted(posts_df["작성자"].unique().tolist())
+                selected_author = st.selectbox("작성자별 필터링", author_filter)
+                
+                if selected_author != "모두 보기":
+                    filtered_posts = posts_df[posts_df["작성자"] == selected_author]
+                else:
+                    filtered_posts = posts_df
+                
+                # Display posts
+                st.dataframe(filtered_posts)
+                
+                # View/Edit/Delete post
+                with st.expander("게시글 보기/수정/삭제"):
+                    # Get all posts
+                    cur.execute("""
+                        SELECT p.post_id, p.title, u.username, p.created_at
+                        FROM blog_posts p
+                        JOIN users u ON p.user_id = u.user_id
+                        ORDER BY p.created_at DESC
+                    """)
+                    
+                    posts = cur.fetchall()
+                    post_options = {f"{row[1]} (by {row[2]} - {row[3].strftime('%Y-%m-%d')})": row[0] for row in posts}
+                    
+                    selected_post = st.selectbox("게시글 선택", list(post_options.keys()))
+                    post_id = post_options[selected_post]
+                    
+                    # Get post details
+                    cur.execute("""
+                        SELECT p.title, p.content, p.image_urls, p.user_id, u.username
+                        FROM blog_posts p
+                        JOIN users u ON p.user_id = u.user_id
+                        WHERE p.post_id = %s
+                    """, (post_id,))
+                    
+                    post = cur.fetchone()
+                    if post:
+                        title, content, image_urls_json, author_id, author_name = post
+                        
+                        st.write(f"### {title}")
+                        st.write(f"**작성자**: {author_name}")
+                        st.write(content)
+                        
+                        # Display images if any
+                        if image_urls_json:
+                            try:
+                                image_urls = json.loads(image_urls_json)
+                                if image_urls:
+                                    st.write("**첨부 이미지**:")
+                                    cols = st.columns(min(len(image_urls), 3))
+                                    for i, img_url in enumerate(image_urls):
+                                        with cols[i % 3]:
+                                            st.image(img_url, width=150)
+                            except:
+                                st.write("이미지를 불러올 수 없습니다.")
+                        
+                        # Get comments
+                        cur.execute("""
+                            SELECT c.comment_id, c.content, u.username, c.created_at
+                            FROM blog_comments c
+                            JOIN users u ON c.user_id = u.user_id
+                            WHERE c.post_id = %s
+                            ORDER BY c.created_at
+                        """, (post_id,))
+                        
+                        comments = cur.fetchall()
+                        
+                        if comments:
+                            st.write("### 댓글")
+                            for comment_id, comment, comment_author, comment_time in comments:
+                                st.markdown(f"""
+                                    <div style="background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                                        <p><strong>{comment_author}</strong> • {comment_time.strftime('%Y-%m-%d %H:%M')}</p>
+                                        <p>{comment}</p>
+                                    </div>
+                                """, unsafe_allow_html=True)
+                                
+                                # Delete comment option
+                                if st.button(f"댓글 삭제", key=f"delete_comment_{comment_id}"):
+                                    try:
+                                        cur.execute("DELETE FROM blog_comments WHERE comment_id = %s", (comment_id,))
+                                        conn.commit()
+                                        st.success("댓글이 삭제되었습니다!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        conn.rollback()
+                                        st.error(f"오류가 발생했습니다: {str(e)}")
+                        
+                        # Delete post option
+                        delete_confirm = st.checkbox(f"'{title}' 게시글을 정말로 삭제하시겠습니까?")
+                        if st.button("게시글 삭제") and delete_confirm:
+                            try:
+                                # Delete comments first
+                                cur.execute("DELETE FROM blog_comments WHERE post_id = %s", (post_id,))
+                                
+                                # Then delete the post
+                                cur.execute("DELETE FROM blog_posts WHERE post_id = %s", (post_id,))
+                                
+                                conn.commit()
+                                st.success(f"'{title}' 게시글이 삭제되었습니다!")
+                                st.rerun()
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"오류가 발생했습니다: {str(e)}")
+            else:
+                st.info("게시글이 없습니다.")
+    
+    #-----------------------------------------------------------
+    # 5. STATISTICS TAB
+    #-----------------------------------------------------------
+    with tabs[4]:
+        st.header("📊 통계")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # User counts
+            cur.execute("""
+                SELECT COUNT(*) FROM users
+            """)
+            user_count = cur.fetchone()[0]
+            
+            cur.execute("""
+                SELECT role, COUNT(*) FROM users GROUP BY role
+            """)
+            role_counts = cur.fetchall()
+            
+            st.metric("총 사용자 수", user_count)
+            
+            st.write("### 역할별 사용자 수")
+            role_df = pd.DataFrame(role_counts, columns=["역할", "수"])
+            st.dataframe(role_df)
+        
+        with col2:
+            # Currency statistics
+            cur.execute("""
+                SELECT SUM(currency) FROM users
+            """)
+            total_currency = cur.fetchone()[0] or 0
+            
+            cur.execute("""
+                SELECT MAX(currency) FROM users
+            """)
+            max_currency = cur.fetchone()[0] or 0
+            
+            cur.execute("""
+                SELECT AVG(currency) FROM users
+            """)
+            avg_currency = cur.fetchone()[0] or 0
+            
+            st.metric("총 화폐량", f"{total_currency:,}원")
+            st.metric("최고 보유량", f"{max_currency:,}원")
+            st.metric("평균 보유량", f"{int(avg_currency):,}원")
+        
+        with col3:
+            # Activity statistics
+            try:
+                cur.execute("""
+                    SELECT COUNT(*) FROM transactions
+                """)
+                transaction_count = cur.fetchone()[0] or 0
+                st.metric("총 거래 수", transaction_count)
+            except:
+                st.info("거래 정보가 없습니다.")
+            
+            try:
+                cur.execute("""
+                    SELECT COUNT(*) FROM blog_posts
+                """)
+                post_count = cur.fetchone()[0] or 0
+                st.metric("총 게시글 수", post_count)
+            except:
+                st.info("게시글 정보가 없습니다.")
+            
+            try:
+                cur.execute("""
+                    SELECT COUNT(*) FROM blog_comments
+                """)
+                comment_count = cur.fetchone()[0] or 0
+                st.metric("총 댓글 수", comment_count)
+            except:
+                pass
+        
+        # Activity over time
+        st.subheader("시간별 활동")
+        
+        try:
+            # Transactions by day
+            cur.execute("""
+                SELECT DATE(created_at) as date, COUNT(*) as count
+                FROM transactions
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+                LIMIT 30
+            """)
+            
+            transactions_by_day = cur.fetchall()
+            
+            if transactions_by_day:
+                trans_df = pd.DataFrame(transactions_by_day, columns=["날짜", "거래 수"])
+                trans_df = trans_df.sort_values("날짜")
+                
+                st.line_chart(trans_df.set_index("날짜"))
+        except:
+            st.info("거래 내역이 없습니다.")
 
-    st.markdown("---")
-
-
-# 2) 블로그 게시글 모더레이션
-st.subheader("📝 블로그 게시글 모더레이션")
-cur.execute("""
-    SELECT id, title, username, timestamp 
-    FROM blog_posts 
-    ORDER BY id DESC
-""")
-for pid, pt, pu, tm in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{pid}] **{pt}** by {pu} ({tm})")
-    if col2.button("삭제", key=f"delp_{pid}"):
-        # 게시글 + 댓글 삭제
-        cur.execute("DELETE FROM blog_comments WHERE post_id=%s", (pid,))
-        cur.execute("DELETE FROM blog_posts WHERE id=%s", (pid,))
-        conn.commit()
-        st.success("게시글 및 댓글을 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 3) 블로그 댓글 모더레이션
-st.subheader("💬 블로그 댓글 모더레이션")
-cur.execute("""
-    SELECT id, post_id, username, comment, timestamp 
-    FROM blog_comments 
-    ORDER BY id DESC
-""")
-for cid, post_id, cu, cm, ctm in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{cid}] ({post_id}) {cu}: {cm} ({ctm})")
-    if col2.button("삭제", key=f"delcmt_{cid}"):
-        cur.execute("DELETE FROM blog_comments WHERE id=%s", (cid,))
-        conn.commit()
-        st.success("댓글을 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 4) 퀴즈 모더레이션
-st.subheader("❓ 퀴즈 모더레이션")
-cur.execute("""
-    SELECT id, title, created_by, timestamp 
-    FROM quizzes 
-    ORDER BY id DESC
-""")
-for qid, qt, qb, qtm in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{qid}] **{qt}** by {qb} ({qtm})")
-    if col2.button("삭제", key=f"delquiz_{qid}"):
-        # 퀴즈 + 응시기록 삭제
-        cur.execute("DELETE FROM quiz_attempts WHERE quiz_id=%s", (qid,))
-        cur.execute("DELETE FROM quizzes WHERE id=%s", (qid,))
-        conn.commit()
-        st.success("퀴즈 및 응시 기록을 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 5) 건의 모더레이션
-st.subheader("📢 건의 모더레이션")
-cur.execute("""
-    SELECT id, content, username, timestamp 
-    FROM suggestions 
-    ORDER BY id DESC
-""")
-for sid, sc, su, stm in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{sid}] {sc} by {su} ({stm})")
-    if col2.button("삭제", key=f"delsugg_{sid}"):
-        cur.execute("DELETE FROM suggestions WHERE id=%s", (sid,))
-        conn.commit()
-        st.success("건의를 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 6) 할 일 모더레이션
-st.subheader("📝 해야할일 모더레이션")
-cur.execute("""
-    SELECT id, content, is_done, timestamp 
-    FROM todos 
-    ORDER BY id DESC
-""")
-for tid, tco, tdone, ttm in cur.fetchall():
-    status = "✅" if tdone else "❌"
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{tid}] {tco} ({ttm}) 상태: {status}")
-    if col2.button("삭제", key=f"deltodo_{tid}"):
-        cur.execute("DELETE FROM todos WHERE id=%s", (tid,))
-        conn.commit()
-        st.success("할 일을 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 7) 동아리 관리
-st.subheader("🎨 동아리 관리")
-cur.execute("""
-    SELECT id, club_name, description 
-    FROM clubs 
-    ORDER BY id
-""")
-for cid, cn, cd in cur.fetchall():
-    col1, col2 = st.columns([0.7, 0.3])
-    col1.write(f"[{cid}] **{cn}** — {cd}")
-    if st.session_state.role in ["제작자", "관리자"] and col2.button("삭제", key=f"delclub_{cid}"):
-        # 동아리 + 관련 데이터 삭제
-        cur.execute("DELETE FROM club_media WHERE club_id=%s", (cid,))
-        cur.execute("DELETE FROM club_chats WHERE club_id=%s", (cid,))
-        cur.execute("DELETE FROM club_members WHERE club_id=%s", (cid,))
-        cur.execute("DELETE FROM clubs WHERE id=%s", (cid,))
-        conn.commit()
-        st.success("동아리 및 관련 데이터를 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 8) 동아리 채팅 모더레이션
-st.subheader("💬 동아리 채팅 모더레이션")
-cur.execute("""
-    SELECT id, club_id, username, message, timestamp 
-    FROM club_chats 
-    ORDER BY id DESC
-""")
-for mid, mclub, mu, mm, mt in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{mid}] (동아리 {mclub}) {mu}: {mm} ({mt})")
-    if col2.button("삭제", key=f"delchat_{mid}"):
-        cur.execute("DELETE FROM club_chats WHERE id=%s", (mid,))
-        conn.commit()
-        st.success("채팅 메시지를 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
-
-
-# 9) 동아리 미디어 모더레이션
-st.subheader("🖼️ 동아리 미디어 모더레이션")
-cur.execute("""
-    SELECT id, club_id, username, file_path, upload_time 
-    FROM club_media 
-    ORDER BY id DESC
-""")
-for mid, mclub, mu, mp, mup in cur.fetchall():
-    col1, col2 = st.columns([0.8, 0.2])
-    col1.write(f"[{mid}] (동아리 {mclub}) by {mu} at {mup} — {mp}")
-    if col2.button("삭제", key=f"delmedia_{mid}"):
-        cur.execute("DELETE FROM club_media WHERE id=%s", (mid,))
-        conn.commit()
-        st.success("미디어 파일 레코드를 삭제했습니다.")
-        st.rerun()
-st.markdown("---")
+except Exception as e:
+    st.error(f"오류가 발생했습니다: {str(e)}")
+    st.write("Debug - Error Details:", e) 
