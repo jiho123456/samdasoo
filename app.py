@@ -18,12 +18,12 @@ from libs.auth import render_login_sidebar
 from libs.ui_helpers import header
 # We will let Streamlit handle page imports from the 'pages' directory
 
-# 데이터베이스 초기화 (첫 사용 시 필요, 1회 사용 후 주석 처리하세요)
-try:
-    init_tables()
-    st.success("데이터베이스가 성공적으로 초기화되었습니다!")
-except Exception as e:
-    st.error(f"데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}")
+# # 데이터베이스 초기화 (첫 사용 시 필요, 1회 사용 후 주석 처리하세요)
+# try:
+#     init_tables()
+#     st.success("데이터베이스가 성공적으로 초기화되었습니다!")
+# except Exception as e:
+#     st.error(f"데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}")
 
 # ── 글로벌 자동 새로고침 (5초) ──────────────────────────
 _ = st_autorefresh(interval=5_000, key="global_autorefresh")
