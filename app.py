@@ -1,7 +1,12 @@
 # Initialize session state variables before any Streamlit commands
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
+from libs.db import get_conn
+from libs.auth import render_login_sidebar
+from libs.ui_helpers import header
+from pages.notices import render_notices
 
-# Initialize all session state variables at the very beginning
+# Initialize session state variables
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
 if 'role' not in st.session_state:
@@ -10,81 +15,134 @@ if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 if 'username' not in st.session_state:
     st.session_state.username = None
+if 'db_initialized' not in st.session_state:
+    st.session_state.db_initialized = False
 
-# Now import other modules
-from streamlit_autorefresh import st_autorefresh
-from libs.db import init_tables
-from libs.auth import render_login_sidebar
-from libs.ui_helpers import header
-# We will let Streamlit handle page imports from the 'pages' directory
+# Global auto-refresh (30 seconds)
+st_autorefresh(interval=30000, key="global_autorefresh")
 
-# # 데이터베이스 초기화 (첫 사용 시 필요, 1회 사용 후 주석 처리하세요)
-# try:
-#     init_tables()
-#     st.success("데이터베이스가 성공적으로 초기화되었습니다!")
-# except Exception as e:
-#     st.error(f"데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}")
-
-# ── 글로벌 자동 새로고침 (5초) ──────────────────────────
-_ = st_autorefresh(interval=5_000, key="global_autorefresh")
-
-# ── 사이드바 로그인/회원가입 렌더링 ──────────────────────
-render_login_sidebar()
-
-# ── 상단 헤더 ────────────────────────────────────────────
-header()
-
-# ── 기본 홈 페이지 내용 ───────────────────────────────────
-# This content will be shown if no page from the 'pages' directory is selected,
-# or if the user is not logged in and no specific public page is designated.
-
-if not st.session_state.get('logged_in'):
-    st.header("🏠 홈")
-    st.write("로그인이 필요합니다. 사이드바에서 로그인 또는 회원가입을 진행해주세요.")
-else:
-    # If logged in, Streamlit will automatically show the selected page from the 'pages/' directory.
-    # If no page is explicitly selected (e.g., on first load after login),
-    # Streamlit usually shows the first page in alphabetical order from the 'pages/' directory.
-    # You can add a default message here if needed, but it's often better to have a default page in 'pages/'.
-    st.header("🏠 홈")
-    st.write(f"환영합니다, {st.session_state.get('username', '사용자')}님! 사이드바에서 메뉴를 선택해주세요.")
-
-# Streamlit will automatically create navigation for files in the 'pages/' directory.
-# Example: if you have 'pages/currency.py', it will create a 'Currency' page.
-
-# Initialize database tables
+# Check if database is properly connected
 try:
-    init_tables()
+    conn = get_conn()
+    cur = conn.cursor()
+    
+    # Simple test query to verify connection
+    cur.execute("SELECT 1")
+    cur.fetchone()
+    
+    cur.close()
+    # Don't close the connection as it's cached by Streamlit
+    
+    db_connected = True
 except Exception as e:
-    st.error(f"Database initialization error: {str(e)}")
+    db_connected = False
+    st.error(f"Database connection error: {str(e)}")
+    st.warning("Please check your database configuration in .streamlit/secrets.toml")
 
-# Global auto-refresh
-st_autorefresh(interval=30000, key="data_refresh")
-
-# Render login sidebar
-render_login_sidebar()
+# Render login sidebar only if database is connected
+if db_connected:
+    render_login_sidebar()
 
 # Render header
 header()
 
-# Display notices if user is logged in
-if st.session_state.get('logged_in'):
-    render_notices()
+# Only continue if database is connected
+if db_connected:
+    # Display notices if user is logged in
+    if st.session_state.logged_in:
+        try:
+            render_notices()
+        except Exception as e:
+            st.warning(f"공지사항을 불러오는 중 오류가 발생했습니다: {str(e)}")
+            st.info("관리자 페이지에서 공지사항 테이블을 초기화해주세요.")
 
-# Sidebar for page selection
-if st.session_state.get('logged_in'):
-    st.sidebar.markdown("---")
-    page = st.sidebar.radio(
-        "페이지 선택",
-        ["Home", "Classroom Currency", "Mock Stocks"],
-        label_visibility="collapsed"
-    )
+    # Main content area
+    if not st.session_state.logged_in:
+        st.header("🏠 홈")
+        st.write("로그인이 필요합니다. 사이드바에서 로그인 또는 회원가입을 진행해주세요.")
+    else:
+        # Sidebar for page selection
+        st.sidebar.markdown("---")
+        
+        # Import these conditionally to avoid circular imports
+        from pages.currency import render_currency_page
+        from pages.stocks import render_stocks_page
+        
+        # Page selection
+        page = st.sidebar.radio(
+            "페이지 선택",
+            ["Home", "Classroom Currency", "Mock Stocks"],
+            label_visibility="collapsed",
+            key="main_navigation"
+        )
+        
+        # Page routing
+        if page == "Home":
+            st.header("🏠 홈")
+            st.write(f"환영합니다, {st.session_state.username}님! 사이드바에서 메뉴를 선택해주세요.")
+            
+            # Show database initialization button for admins
+            if st.session_state.role in ['teacher', '제작자']:
+                st.markdown("---")
+                st.subheader("🛠️ 관리자 도구")
+                
+                if st.button("데이터베이스 테이블 초기화", key="init_db_button"):
+                    try:
+                        from libs.db import init_tables
+                        init_tables()
+                        st.session_state.db_initialized = True
+                        st.success("데이터베이스 테이블이 성공적으로 초기화되었습니다!")
+                        st.info("페이지를 새로고침하면 모든 기능이 활성화됩니다.")
+                    except Exception as e:
+                        st.error(f"데이터베이스 초기화 오류: {str(e)}")
+                
+                if st.session_state.db_initialized:
+                    st.success("데이터베이스가 초기화되었습니다!")
+                
+        elif page == "Classroom Currency":
+            try:
+                render_currency_page()
+            except Exception as e:
+                st.error(f"화폐 시스템 오류: {str(e)}")
+                if st.session_state.role in ['teacher', '제작자']:
+                    st.info("홈 페이지에서 데이터베이스 초기화를 진행해주세요.")
+                else:
+                    st.info("관리자에게 문의해주세요.")
+                
+        elif page == "Mock Stocks":
+            try:
+                render_stocks_page()
+            except Exception as e:
+                st.error(f"주식 시스템 오류: {str(e)}")
+                if st.session_state.role in ['teacher', '제작자']:
+                    st.info("홈 페이지에서 데이터베이스 초기화를 진행해주세요.")
+                else:
+                    st.info("관리자에게 문의해주세요.")
+else:
+    st.header("⚠️ 데이터베이스 연결 오류")
+    st.write("데이터베이스에 연결할 수 없습니다. 관리자에게 문의해주세요.")
     
-    # Page routing
-    if page == "Home":
-        st.title("Welcome to the Classroom Currency System!")
-        st.write("Please select a page from the sidebar to get started.")
-    elif page == "Classroom Currency":
-        render_currency_page()
-    elif page == "Mock Stocks":
-        render_stocks_page()
+    # Show troubleshooting information for admins
+    with st.expander("문제 해결 정보"):
+        st.write("""
+        1. `.streamlit/secrets.toml` 파일이 올바르게 설정되어 있는지 확인하세요.
+        2. 데이터베이스 서버가 실행 중인지 확인하세요.
+        3. 데이터베이스 사용자 이름, 비밀번호, 호스트 등이 올바른지 확인하세요.
+        4. 방화벽 설정을 확인하세요.
+        """)
+        
+        # Only show the secret configuration form to admins when logged in
+        if st.session_state.get('role') in ['teacher', '제작자'] and st.session_state.logged_in:
+            st.subheader("데이터베이스 설정")
+            
+            with st.form("db_config_form"):
+                db_user = st.text_input("사용자 이름", value=st.secrets.get("user", ""))
+                db_password = st.text_input("비밀번호", type="password", value=st.secrets.get("password", ""))
+                db_host = st.text_input("호스트", value=st.secrets.get("host", ""))
+                db_port = st.text_input("포트", value=st.secrets.get("port", "5432"))
+                db_name = st.text_input("데이터베이스 이름", value=st.secrets.get("dbname", ""))
+                
+                submit = st.form_submit_button("설정 저장")
+                
+                if submit:
+                    st.warning("이 기능은 데모용입니다. 실제로는 서버에서 .streamlit/secrets.toml 파일을 직접 수정해야 합니다.")
