@@ -2,6 +2,8 @@
 import streamlit as st
 
 # Initialize all session state variables at the very beginning
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 for key in ['role', 'user_id', 'logged_in']:
     if key not in st.session_state:
         st.session_state[key] = None
@@ -15,11 +17,11 @@ from pages.currency import render_currency_page
 from pages.stocks import render_stocks_page
 
 # ── 최초 1회만 실행하고 주석 처리하세요 ───────────────────
-# try:
-#     init_tables()
-#     st.success("데이터베이스가 성공적으로 초기화되었습니다!")
-# except Exception as e:
-#     st.error(f"데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}")
+try:
+    init_tables()
+    st.success("데이터베이스가 성공적으로 초기화되었습니다!")
+except Exception as e:
+    st.error(f"데이터베이스 초기화 중 오류가 발생했습니다: {str(e)}")
 
 # ── 글로벌 자동 새로고침 (5초) ──────────────────────────
 _ = st_autorefresh(interval=5_000, key="global_autorefresh")
