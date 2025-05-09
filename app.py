@@ -76,60 +76,29 @@ if db_connected:
         # Sidebar for page selection
         st.sidebar.markdown("---")
         
-        # Import these conditionally to avoid circular imports
-        from pages.currency import render_currency_page
-        from pages.stocks import render_stocks_page
+        # Let Streamlit handle page navigation automatically
+        # We won't try to import or route to pages manually
+        st.header("🏠 홈")
+        st.write(f"환영합니다, {st.session_state.username}님! 사이드바에서 메뉴를 선택해주세요.")
         
-        # Page selection
-        page = st.sidebar.radio(
-            "페이지 선택",
-            ["Home", "Classroom Currency", "Mock Stocks"],
-            label_visibility="collapsed",
-            key="main_navigation"
-        )
-        
-        # Page routing
-        if page == "Home":
-            st.header("🏠 홈")
-            st.write(f"환영합니다, {st.session_state.username}님! 사이드바에서 메뉴를 선택해주세요.")
+        # Show database initialization button for admins
+        if st.session_state.role in ['teacher', '제작자']:
+            st.markdown("---")
+            st.subheader("🛠️ 관리자 도구")
             
-            # Show database initialization button for admins
-            if st.session_state.role in ['teacher', '제작자']:
-                st.markdown("---")
-                st.subheader("🛠️ 관리자 도구")
-                
-                if st.button("데이터베이스 테이블 초기화", key="init_db_button"):
-                    try:
-                        from libs.db import init_tables
-                        init_tables()
-                        st.session_state.db_initialized = True
-                        st.success("데이터베이스 테이블이 성공적으로 초기화되었습니다!")
-                        st.info("페이지를 새로고침하면 모든 기능이 활성화됩니다.")
-                    except Exception as e:
-                        st.error(f"데이터베이스 초기화 오류: {str(e)}")
-                
-                if st.session_state.db_initialized:
-                    st.success("데이터베이스가 초기화되었습니다!")
-                
-        elif page == "Classroom Currency":
-            try:
-                render_currency_page()
-            except Exception as e:
-                st.error(f"화폐 시스템 오류: {str(e)}")
-                if st.session_state.role in ['teacher', '제작자']:
-                    st.info("홈 페이지에서 데이터베이스 초기화를 진행해주세요.")
-                else:
-                    st.info("관리자에게 문의해주세요.")
-                
-        elif page == "Mock Stocks":
-            try:
-                render_stocks_page()
-            except Exception as e:
-                st.error(f"주식 시스템 오류: {str(e)}")
-                if st.session_state.role in ['teacher', '제작자']:
-                    st.info("홈 페이지에서 데이터베이스 초기화를 진행해주세요.")
-                else:
-                    st.info("관리자에게 문의해주세요.")
+            if st.button("데이터베이스 테이블 초기화", key="init_db_button"):
+                try:
+                    from libs.db import init_tables
+                    init_tables()
+                    st.session_state.db_initialized = True
+                    st.success("데이터베이스 테이블이 성공적으로 초기화되었습니다!")
+                    st.info("페이지를 새로고침하면 모든 기능이 활성화됩니다.")
+                except Exception as e:
+                    st.error(f"데이터베이스 초기화 오류: {str(e)}")
+            
+            if st.session_state.db_initialized:
+                st.success("데이터베이스가 초기화되었습니다!")
+            
 else:
     st.header("⚠️ 데이터베이스 연결 오류")
     st.write("데이터베이스에 연결할 수 없습니다. 관리자에게 문의해주세요.")
