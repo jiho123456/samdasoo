@@ -232,6 +232,7 @@ try:
     
     # Purchased items
     with st.expander("🛍️ 구매한 아이템"):
+        st.write("Debug - User ID:", user_id)
         cur.execute("""
             SELECT i.name, i.price, ui.purchased_at
             FROM user_items ui
@@ -241,11 +242,22 @@ try:
         """, (user_id,))
         
         items = cur.fetchall()
+        st.write("Debug - Raw Query Results:", items)
         if items:
             for name, price, purchased_at in items:
                 st.write(f"{purchased_at.strftime('%Y-%m-%d')} - {name} - {price:,}원")
         else:
             st.info("구매한 아이템이 없습니다.")
+            
+        # Debug: Check if user_items table has any entries
+        cur.execute("SELECT COUNT(*) FROM user_items WHERE user_id = %s", (user_id,))
+        item_count = cur.fetchone()[0]
+        st.write("Debug - Total items in user_items table for this user:", item_count)
+        
+        # Debug: Check if shop_items table has entries
+        cur.execute("SELECT COUNT(*) FROM shop_items")
+        shop_item_count = cur.fetchone()[0]
+        st.write("Debug - Total items in shop_items table:", shop_item_count)
 
 except Exception as e:
     st.error(f"오류가 발생했습니다: {str(e)}")

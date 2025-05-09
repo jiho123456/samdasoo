@@ -45,16 +45,15 @@ try:
             if st.button("기본 아이템 추가"):
                 # Add some default avatars
                 default_items = [
-                    ("고양이 아바타", "귀여운 고양이 아바타입니다.", "avatar", 100, "https://i.imgur.com/9LFtH1T.png"),
-                    ("강아지 아바타", "충성스러운 강아지 아바타입니다.", "avatar", 100, "https://i.imgur.com/H9SbJRO.png"),
-                    ("펭귄 아바타", "시원한 펭귄 아바타입니다.", "avatar", 150, "https://i.imgur.com/u2b02Th.png"),
-                    ("황금 테두리", "프로필에 황금색 테두리를 추가합니다.", "badge", 200, "https://i.imgur.com/1abgIrY.png"),
-                    ("빛나는 배경", "프로필에 빛나는 배경을 추가합니다.", "background", 300, "https://i.imgur.com/zBGt5KM.png"),
-                    ("별 배지", "특별한 별 모양 배지입니다.", "badge", 250, "https://i.imgur.com/LJnzBbZ.png"),
-                    ("VIP 색상", "이름을 VIP 색상으로 변경합니다.", "color", 500, "https://i.imgur.com/pZQCnbd.png"),
-                    ("우주 배경", "우주 테마 배경입니다.", "background", 400, "https://i.imgur.com/JN5QgbH.png"),
-                    ("귀여운 폰트", "귀여운 폰트로 텍스트를 표시합니다.", "font", 150, "https://i.imgur.com/QA3SrWc.png"),
-                    ("댄디 폰트", "댄디한 폰트로 텍스트를 표시합니다.", "font", 150, "https://i.imgur.com/8Zn8X5m.png"),
+                    ("고양이 아바타", "귀여미 고양이", "avatar", 100, "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTOs6NZfe4DsUL78wLGiNA-8wlKOmVGrMqdWA&s"),
+                    ("강아지 아바타", "멍멍이", "avatar", 100, "https://i.imgur.com/H9SbJRO.png"),
+                    ("펭귄 아바타", "펭펭펭펭수가 아니라 펭펭한 펭귄이", "avatar", 150, "https://i.imgur.com/u2b02Th.png"),
+                    ("황금 테두리", "금인가? 아니 도금이네", "badge", 200, "https://i.imgur.com/1abgIrY.png"),
+                    ("빛나는 배경", "아아~ 빛이나네~", "background", 300, "https://i.imgur.com/zBGt5KM.png"),
+                    ("별 배지", "빤딱빤딱 거리는 별", "badge", 250, "https://i.imgur.com/LJnzBbZ.png"),
+                    ("VIP 색상", "닉네임이 예뻐짐", "color", 500, "https://i.imgur.com/pZQCnbd.png"),
+                    ("우주 배경", "우주배경", "background", 400, "https://i.imgur.com/JN5QgbH.png"),
+                    ("귀여운 폰트", "폰트의 업그레이드?!", "font", 150, "https://i.imgur.com/QA3SrWc.png"),
                 ]
                 
                 for name, desc, type_, price, img_url in default_items:
