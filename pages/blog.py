@@ -159,7 +159,7 @@ try:
                 cur.execute("SELECT user_id FROM blog_posts WHERE post_id = %s", (post_id,))
                 post_author_id = cur.fetchone()[0]
                 if user_id == post_author_id or st.session_state.get('role') in ['teacher', '제작자']:
-                    if st.button(f"게시글 삭제", key=f"delete_{post_id}"):
+                    if st.button(f"게시글 삭제", key=f"delete_post_{post_id}_{created_at}"):
                         try:
                             # Delete comments first
                             cur.execute("DELETE FROM blog_comments WHERE post_id = %s", (post_id,))

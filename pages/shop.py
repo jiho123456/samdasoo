@@ -157,7 +157,7 @@ try:
                         st.success("구매 완료!")
                     else:
                         # Buy button
-                        if st.button(f"구매하기", key=f"buy_{item_id}"):
+                        if st.button(f"구매하기", key=f"buy_{item_id}_{idx}_{tab_name}"):
                             # Check if user has enough currency
                             if balance >= price:
                                 try:
@@ -231,7 +231,7 @@ try:
                         
                         # Button to equip/unequip
                         button_text = "장착 해제하기" if is_equipped else "장착하기"
-                        if st.button(button_text, key=f"equip_{item_id}"):
+                        if st.button(button_text, key=f"equip_{item_id}_{idx}_{tab_name}"):
                             try:
                                 # If equipping, unequip any other items of the same type first
                                 if not is_equipped:
