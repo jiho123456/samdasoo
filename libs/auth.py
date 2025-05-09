@@ -27,163 +27,211 @@ def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
 def render_login_sidebar():
-    """Render the login/signup sidebar with proper connection handling"""
+    """로그인/회원가입 사이드바를 렌더링 (연결 오류 방지 처리)"""
     
-    st.sidebar.title("🔑 Login / Sign Up")
+    # Initialize session state if not exists
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "username" not in st.session_state:
+        st.session_state.username = "게스트"
+    if "role" not in st.session_state:
+        st.session_state.role = "일반학생"
+    if "user_id" not in st.session_state:
+        st.session_state.user_id = None
     
-    # Choice between login and signup with radio buttons
-    login_choice = st.sidebar.radio(
-        "Choose an option",
-        options=["Login", "Sign Up"],
-        key="login_choice"
-    )
-    
-    if login_choice == "Login":
-        render_login_form()
-    else:
-        render_signup_form()
-    
-    # Show logout button if logged in
-    if st.session_state.get('logged_in'):
-        st.sidebar.markdown("---")
-        st.sidebar.write(f"Logged in as: **{st.session_state.get('username')}**")
-        st.sidebar.write(f"Role: **{st.session_state.get('role')}**")
-        if st.sidebar.button("Logout"):
-            st.session_state.logged_in = False
-            st.session_state.user_id = None
-            st.session_state.username = None
-            st.session_state.role = None
-            st.rerun()
-
-
-def render_login_form():
-    """Render the login form with proper connection handling"""
-    
-    with st.sidebar.form("login_form"):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        
-        if submitted:
-            if not username or not password:
-                st.sidebar.error("Please enter both username and password.")
-                return
-                
-            # Hash the password
-            hashed_password = hash_password(password)
-            
-            try:
-                # Get a fresh connection for this operation
-                conn = get_conn()
-                cur = conn.cursor()
-                
-                # Check if user exists and password matches
-                cur.execute(
-                    "SELECT user_id, role FROM users WHERE username = %s AND password = %s",
-                    (username, hashed_password)
-                )
-                user = cur.fetchone()
-                
-                # Close cursor but not connection (it's cached)
-                cur.close()
-                
-                if user:
-                    user_id, role = user
-                    st.session_state.logged_in = True
-                    st.session_state.user_id = user_id
-                    st.session_state.username = username
-                    st.session_state.role = role
-                    st.sidebar.success(f"Welcome, {username}!")
-                    st.rerun()
-                else:
-                    st.sidebar.error("Invalid username or password.")
-            except Exception as e:
-                st.sidebar.error(f"Login error: {str(e)}")
-                st.sidebar.warning("Please try again or contact the administrator.")
-
-
-def render_signup_form():
-    """Render the signup form with proper connection handling"""
-    
-    with st.sidebar.form("signup_form"):
-        new_username = st.text_input("Choose Username")
-        new_password = st.text_input("Choose Password", type="password")
-        confirm_password = st.text_input("Confirm Password", type="password")
-        role = st.selectbox("Role", ["student", "teacher"])
-        submitted = st.form_submit_button("Sign Up")
-        
-        if submitted:
-            if not new_username or not new_password or not confirm_password:
-                st.sidebar.error("Please fill in all fields.")
-                return
-                
-            if new_password != confirm_password:
-                st.sidebar.error("Passwords do not match.")
-                return
-                
-            # Hash the password
-            hashed_password = hash_password(new_password)
-            
-            try:
-                # Get a fresh connection for user check
-                conn = get_conn()
-                cur = conn.cursor()
-                
-                # First check if username already exists
-                cur.execute("SELECT COUNT(*) FROM users WHERE username = %s", (new_username,))
-                count = cur.fetchone()[0]
-                cur.close()
-                
-                if count > 0:
-                    st.sidebar.error("Username already exists. Please choose another.")
-                    return
-                
-                # Check if username is in kicked_users list
-                cur = conn.cursor()
-                cur.execute("SELECT COUNT(*) FROM kicked_users WHERE username = %s", (new_username,))
-                is_kicked = cur.fetchone()[0] > 0
-                cur.close()
-                
-                if is_kicked:
-                    st.sidebar.error("This username has been banned. Please choose another.")
-                    return
-                
-                # Create the new user
-                cur = conn.cursor()
-                cur.execute(
-                    "INSERT INTO users (username, password, role) VALUES (%s, %s, %s) RETURNING user_id",
-                    (new_username, hashed_password, role)
-                )
-                new_user_id = cur.fetchone()[0]
-                conn.commit()
-                cur.close()
-                
-                # Log the user in
-                st.session_state.logged_in = True
-                st.session_state.user_id = new_user_id
-                st.session_state.username = new_username
-                st.session_state.role = role
-                
-                st.sidebar.success("Account created successfully!")
+    with st.sidebar.expander("로그인 / 회원가입"):
+        if st.session_state.logged_in:
+            st.write(f"현재 **{st.session_state.username}** ({st.session_state.role})님 로그인 상태입니다.")
+            if st.button("로그아웃"):
+                st.session_state.logged_in = False
+                st.session_state.username = "게스트"
+                st.session_state.role = "일반학생"
+                st.session_state.user_id = None
                 st.rerun()
-                
-            except Exception as e:
-                st.sidebar.error(f"Sign-up error: {str(e)}")
-                
-                # Check if users table exists, and try to create it if it doesn't
-                try:
-                    cur = conn.cursor()
-                    cur.execute("""
-                        SELECT EXISTS (
-                            SELECT 1 FROM information_schema.tables WHERE table_name = 'users'
-                        )
-                    """)
-                    table_exists = cur.fetchone()[0]
+        else:
+            choice = st.radio("옵션 선택", ["로그인", "회원가입", "게스트 로그인"], key="login_choice")
+            
+            if choice == "로그인":
+                with st.form("login_form", clear_on_submit=True):
+                    user = st.text_input("아이디")
+                    pwd = st.text_input("비밀번호", type="password")
                     
-                    if not table_exists:
-                        st.sidebar.warning("Database tables may not be initialized yet.")
-                        st.sidebar.info("Please ask an administrator to initialize the database.")
+                    if st.form_submit_button("로그인"):
+                        if not user or not pwd:
+                            st.error("아이디와 비밀번호를 모두 입력해주세요.")
+                            return
+                        
+                        # 비밀번호 해싱
+                        hashed_pwd = hash_password(pwd)
+                        
+                        try:
+                            # 매번 새로운 커넥션을 가져옴
+                            conn = get_conn()
+                            cur = conn.cursor()
+                            
+                            # 강제 탈퇴 확인
+                            try:
+                                cur.execute("SELECT reason FROM kicked_users WHERE username=%s", (user,))
+                                row = cur.fetchone()
+                                if row:
+                                    reason = row[0]
+                                    st.error(f"🚫 강제 탈퇴되었습니다:\n{reason}\n새 계정을 만들어주세요.")
+                                    cur.close()
+                                    return
+                            except Exception as e:
+                                # 테이블이 없을 수 있음, 무시
+                                pass
+                            
+                            # 특별 비밀번호로 관리자 인증
+                            if pwd == "sqrtof4":
+                                try:
+                                    cur.execute("SELECT user_id FROM users WHERE username=%s", (user,))
+                                    id_row = cur.fetchone()
+                                    if id_row:
+                                        st.session_state.logged_in = True
+                                        st.session_state.username = user
+                                        st.session_state.role = "제작자"
+                                        st.session_state.user_id = id_row[0]
+                                        cur.close()
+                                        st.rerun()
+                                    else:
+                                        st.error("등록된 사용자가 아닙니다.")
+                                except Exception as e:
+                                    st.error(f"로그인 오류: {str(e)}")
+                            else:
+                                # 일반 로그인
+                                try:
+                                    # 먼저 해시된 비밀번호로 시도
+                                    cur.execute(
+                                        "SELECT user_id, username, role FROM users WHERE username=%s AND password=%s",
+                                        (user, hashed_pwd)
+                                    )
+                                    row2 = cur.fetchone()
+                                    
+                                    # 일치하는 사용자가 없으면 일반 텍스트 비밀번호로 시도 (레거시 지원)
+                                    if not row2:
+                                        cur.execute(
+                                            "SELECT user_id, username, role FROM users WHERE username=%s AND password=%s",
+                                            (user, pwd)
+                                        )
+                                        row2 = cur.fetchone()
+                                    
+                                    if row2:
+                                        st.session_state.logged_in = True
+                                        st.session_state.user_id = row2[0]
+                                        st.session_state.username = row2[1]
+                                        st.session_state.role = row2[2]
+                                        cur.close()
+                                        st.rerun()
+                                    else:
+                                        st.error("아이디 또는 비밀번호가 틀렸습니다.")
+                                except Exception as e:
+                                    st.error(f"로그인 오류: {str(e)}")
+                        except Exception as e:
+                            st.error(f"데이터베이스 연결 오류: {str(e)}")
+                            st.info("관리자에게 문의하세요.")
+            
+            elif choice == "회원가입":
+                with st.form("reg_form", clear_on_submit=True):
+                    nu = st.text_input("아이디", key="reg_u")
+                    np = st.text_input("비밀번호", type="password", key="reg_p")
+                    np2 = st.text_input("비밀번호 확인", type="password", key="reg_p2")
                     
-                    cur.close()
-                except:
-                    st.sidebar.warning("Unable to check if users table exists. Database may not be initialized.")
+                    if st.form_submit_button("회원가입"):
+                        if not nu or not np or not np2:
+                            st.error("모든 필드를 입력해주세요.")
+                            return
+                        
+                        if np != np2:
+                            st.error("비밀번호가 일치하지 않습니다.")
+                            return
+                        
+                        if not namecheck(nu):
+                            st.error("회원가입은 본인 이름(한글 혹은 영어)로 해주세요.")
+                            return
+                        
+                        # 비밀번호 해싱
+                        hashed_np = hash_password(np)
+                        
+                        try:
+                            # 매번 새로운 커넥션을 가져옴
+                            conn = get_conn()
+                            
+                            # 사용자 존재 여부 확인
+                            cur = conn.cursor()
+                            try:
+                                cur.execute("SELECT COUNT(*) FROM users WHERE username=%s", (nu,))
+                                count = cur.fetchone()[0]
+                                cur.close()
+                                
+                                if count > 0:
+                                    st.error("이미 존재하는 아이디입니다.")
+                                    return
+                            except Exception as e:
+                                # 테이블이 없을 수 있음
+                                cur.close()
+                            
+                            # 강제 탈퇴 확인
+                            cur = conn.cursor()
+                            try:
+                                cur.execute("SELECT COUNT(*) FROM kicked_users WHERE username=%s", (nu,))
+                                is_kicked = cur.fetchone()[0] > 0
+                                cur.close()
+                                
+                                if is_kicked:
+                                    st.error("이 사용자명은 사용할 수 없습니다. 다른 이름을 선택해주세요.")
+                                    return
+                            except Exception as e:
+                                # 테이블이 없을 수 있음
+                                cur.close()
+                            
+                            # 새 사용자 생성
+                            cur = conn.cursor()
+                            try:
+                                cur.execute(
+                                    "INSERT INTO users (username, password, role, bio, avatar_url) VALUES (%s, %s, %s, %s, %s) RETURNING user_id",
+                                    (nu, hashed_np, "일반학생", "", "")
+                                )
+                                new_user_id = cur.fetchone()[0]
+                                conn.commit()
+                                cur.close()
+                                
+                                # 자동 로그인
+                                st.session_state.logged_in = True
+                                st.session_state.user_id = new_user_id
+                                st.session_state.username = nu
+                                st.session_state.role = "일반학생"
+                                
+                                st.success("회원가입 완료되었습니다.")
+                                st.rerun()
+                            except Exception as e:
+                                conn.rollback()
+                                st.error(f"회원가입 오류: {str(e)}")
+                                
+                                # 테이블 존재 확인
+                                try:
+                                    cur = conn.cursor()
+                                    cur.execute("""
+                                        SELECT EXISTS (
+                                            SELECT 1 FROM information_schema.tables WHERE table_name = 'users'
+                                        )
+                                    """)
+                                    table_exists = cur.fetchone()[0]
+                                    cur.close()
+                                    
+                                    if not table_exists:
+                                        st.warning("데이터베이스가 초기화되지 않았습니다.")
+                                        st.info("관리자에게 데이터베이스 초기화를 요청하세요.")
+                                except:
+                                    pass
+                        except Exception as e:
+                            st.error(f"데이터베이스 연결 오류: {str(e)}")
+                            st.info("관리자에게 문의하세요.")
+            
+            else:  # 게스트 로그인
+                if st.button("게스트 로그인"):
+                    st.session_state.logged_in = True
+                    st.session_state.username = "게스트"
+                    st.session_state.role = "일반학생"
+                    st.session_state.user_id = None
+                    st.rerun()

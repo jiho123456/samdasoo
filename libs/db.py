@@ -3,9 +3,25 @@ import streamlit as st
 import psycopg2
 import psycopg2.errors
 
-@st.cache_resource
+@st.cache_resource(ttl=300)  # Cache for 5 minutes
 def get_conn():
+    """데이터베이스 연결을 가져오거나 새로 생성합니다."""
     try:
+        # Check if we already have a connection in session state
+        if "db_conn" in st.session_state and st.session_state.db_conn:
+            conn = st.session_state.db_conn
+            
+            # Test if connection is still alive
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT 1")
+                cur.close()
+                return conn
+            except (psycopg2.InterfaceError, psycopg2.OperationalError):
+                # Connection is dead, create a new one
+                pass
+        
+        # Create a new connection
         conn = psycopg2.connect(
             user=st.secrets["user"],
             password=st.secrets["password"],
@@ -18,16 +34,22 @@ def get_conn():
             keepalives_count=5
         )
         conn.autocommit = True
+        
+        # Store connection in session state
+        st.session_state.db_conn = conn
+        
         return conn
     except Exception as e:
         st.error(f"데이터베이스 연결 오류: {str(e)}")
         raise e
 
-def init_tables():
+def init_tables(force_recreate=False):
     """
-    최초 1회만 실행하세요. 
-    여기서는 별도 임시 커넥션을 사용하고, 
-    캐시된 get_conn() 커넥션은 닫지 않습니다.
+    데이터베이스 테이블을 초기화합니다.
+    
+    Args:
+        force_recreate (bool): True인 경우 기존 테이블을 모두 삭제하고 새로 생성합니다.
+                              False인 경우 존재하지 않는 테이블만 생성합니다.
     """
     try:
         # 임시 커넥션
@@ -41,19 +63,29 @@ def init_tables():
         tmp_conn.autocommit = True
         tmp_cur = tmp_conn.cursor()
 
-        # 기존 테이블 삭제 (외래 키 제약조건을 고려한 순서로 삭제)
-        tmp_cur.execute("""
-            DROP TABLE IF EXISTS user_items CASCADE;
-            DROP TABLE IF EXISTS shop_items CASCADE;
-            DROP TABLE IF EXISTS blog_posts CASCADE;
-            DROP TABLE IF EXISTS blog_comments CASCADE;
-            DROP TABLE IF EXISTS transactions CASCADE;
-            DROP TABLE IF EXISTS quest_completions CASCADE;
-            DROP TABLE IF EXISTS quests CASCADE;
-            DROP TABLE IF EXISTS jobs CASCADE;
-            DROP TABLE IF EXISTS kicked_users CASCADE;
-            DROP TABLE IF EXISTS users CASCADE;
-        """)
+        # 기존 테이블 삭제 (force_recreate가 True인 경우에만)
+        if force_recreate:
+            st.info("기존 테이블을 삭제하고 새로 생성합니다...")
+            tmp_cur.execute("""
+                DROP TABLE IF EXISTS refunds CASCADE;
+                DROP TABLE IF EXISTS user_items CASCADE;
+                DROP TABLE IF EXISTS shop_items CASCADE;
+                DROP TABLE IF EXISTS notices CASCADE;
+                DROP TABLE IF EXISTS blog_posts CASCADE;
+                DROP TABLE IF EXISTS blog_comments CASCADE;
+                DROP TABLE IF EXISTS stock_transactions CASCADE;
+                DROP TABLE IF EXISTS stock_portfolios CASCADE;
+                DROP TABLE IF EXISTS stocks CASCADE;
+                DROP TABLE IF EXISTS transactions CASCADE;
+                DROP TABLE IF EXISTS quest_completions CASCADE;
+                DROP TABLE IF EXISTS quests CASCADE;
+                DROP TABLE IF EXISTS jobs CASCADE;
+                DROP TABLE IF EXISTS kicked_users CASCADE;
+                DROP TABLE IF EXISTS users CASCADE;
+                DROP TABLE IF EXISTS suggestions CASCADE;
+            """)
+        else:
+            st.info("누락된 테이블만 생성합니다...")
 
         # Users 테이블 생성 (with roles, currency, and password)
         tmp_cur.execute("""
@@ -114,7 +146,7 @@ def init_tables():
                 from_user_id INTEGER REFERENCES users(user_id),
                 to_user_id INTEGER REFERENCES users(user_id),
                 amount INTEGER NOT NULL,
-                type TEXT NOT NULL CHECK (type IN ('salary', 'quest', 'transfer')),
+                type TEXT NOT NULL,
                 description TEXT,
                 created_by INTEGER REFERENCES users(user_id),
                 created_at TIMESTAMPTZ DEFAULT now()
@@ -141,6 +173,7 @@ def init_tables():
                 user_id INTEGER REFERENCES users(user_id),
                 item_id INTEGER REFERENCES shop_items(item_id),
                 is_equipped BOOLEAN DEFAULT false,
+                is_active BOOLEAN DEFAULT true,
                 purchased_at TIMESTAMPTZ DEFAULT now()
             );
         """)
@@ -169,16 +202,16 @@ def init_tables():
             );
         """)
 
-        # kicked_users 테이블 생성 (마지막에 생성)
+        # Kicked Users Table
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS kicked_users (
                 username TEXT PRIMARY KEY,
-                reason   TEXT NOT NULL,
+                reason TEXT NOT NULL,
                 kicked_at TIMESTAMPTZ DEFAULT now()
             );
         """)
 
-        # Create refunds table
+        # Refunds Table
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
@@ -191,8 +224,8 @@ def init_tables():
                 created_at TIMESTAMPTZ DEFAULT now()
             );
         """)
-
-        # Create notices table
+        
+        # Notices Table
         tmp_cur.execute("""
             CREATE TABLE IF NOT EXISTS notices (
                 notice_id SERIAL PRIMARY KEY,
@@ -203,7 +236,59 @@ def init_tables():
                 created_by INTEGER REFERENCES users(user_id),
                 created_at TIMESTAMPTZ DEFAULT now(),
                 updated_at TIMESTAMPTZ DEFAULT now()
-            )
+            );
+        """)
+        
+        # Suggestions Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id SERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                username TEXT NOT NULL,
+                user_id INTEGER REFERENCES users(user_id),
+                timestamp TIMESTAMPTZ DEFAULT now(),
+                status TEXT DEFAULT 'pending'
+            );
+        """)
+        
+        # Stocks Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS stocks (
+                stock_id SERIAL PRIMARY KEY,
+                symbol TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                current_price DECIMAL(10, 2) NOT NULL,
+                last_updated TIMESTAMPTZ DEFAULT now(),
+                created_by INTEGER REFERENCES users(user_id),
+                created_at TIMESTAMPTZ DEFAULT now()
+            );
+        """)
+        
+        # Stock Portfolios Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS stock_portfolios (
+                portfolio_id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                stock_id INTEGER REFERENCES stocks(stock_id),
+                quantity INTEGER NOT NULL,
+                avg_purchase_price DECIMAL(10, 2) NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT now(),
+                updated_at TIMESTAMPTZ DEFAULT now(),
+                UNIQUE(user_id, stock_id)
+            );
+        """)
+        
+        # Stock Transactions Table
+        tmp_cur.execute("""
+            CREATE TABLE IF NOT EXISTS stock_transactions (
+                transaction_id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(user_id),
+                stock_id INTEGER REFERENCES stocks(stock_id),
+                quantity INTEGER NOT NULL,
+                price DECIMAL(10, 2) NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('buy', 'sell')),
+                created_at TIMESTAMPTZ DEFAULT now()
+            );
         """)
 
         tmp_conn.commit()
