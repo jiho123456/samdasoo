@@ -26,6 +26,27 @@ def hash_password(password):
     """Simple password hashing using SHA-256"""
     return hashlib.sha256(password.encode()).hexdigest()
 
+# Function to get a fresh connection for each operation
+def get_fresh_connection():
+    """Get a completely fresh database connection for this operation"""
+    try:
+        # Create a brand new connection using secrets
+        conn = psycopg2.connect(
+            user=st.secrets["user"],
+            password=st.secrets["password"],
+            host=st.secrets["host"],
+            port=st.secrets["port"],
+            dbname=st.secrets["dbname"],
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5
+        )
+        conn.autocommit = True
+        return conn, None
+    except Exception as e:
+        return None, str(e)
+
 def render_login_sidebar():
     """로그인/회원가입 사이드바를 렌더링 (연결 오류 방지 처리)"""
     
@@ -64,9 +85,13 @@ def render_login_sidebar():
                         # 비밀번호 해싱
                         hashed_pwd = hash_password(pwd)
                         
+                        # Get a fresh connection
+                        conn, error = get_fresh_connection()
+                        if not conn:
+                            st.error(f"데이터베이스 연결 실패: {error}")
+                            return
+                            
                         try:
-                            # 매번 새로운 커넥션을 가져옴
-                            conn = get_conn()
                             cur = conn.cursor()
                             
                             # 강제 탈퇴 확인
@@ -77,6 +102,7 @@ def render_login_sidebar():
                                     reason = row[0]
                                     st.error(f"🚫 강제 탈퇴되었습니다:\n{reason}\n새 계정을 만들어주세요.")
                                     cur.close()
+                                    conn.close()
                                     return
                             except Exception as e:
                                 # 테이블이 없을 수 있음, 무시
@@ -93,6 +119,7 @@ def render_login_sidebar():
                                         st.session_state.role = "제작자"
                                         st.session_state.user_id = id_row[0]
                                         cur.close()
+                                        conn.close()
                                         st.rerun()
                                     else:
                                         st.error("등록된 사용자가 아닙니다.")
@@ -122,6 +149,7 @@ def render_login_sidebar():
                                         st.session_state.username = row2[1]
                                         st.session_state.role = row2[2]
                                         cur.close()
+                                        conn.close()
                                         st.rerun()
                                     else:
                                         st.error("아이디 또는 비밀번호가 틀렸습니다.")
@@ -130,6 +158,12 @@ def render_login_sidebar():
                         except Exception as e:
                             st.error(f"데이터베이스 연결 오류: {str(e)}")
                             st.info("관리자에게 문의하세요.")
+                        finally:
+                            try:
+                                cur.close()
+                                conn.close()
+                            except:
+                                pass
             
             elif choice == "회원가입":
                 with st.form("reg_form", clear_on_submit=True):
@@ -153,40 +187,43 @@ def render_login_sidebar():
                         # 비밀번호 해싱
                         hashed_np = hash_password(np)
                         
-                        try:
-                            # 매번 새로운 커넥션을 가져옴
-                            conn = get_conn()
+                        # Get a fresh connection
+                        conn, error = get_fresh_connection()
+                        if not conn:
+                            st.error(f"데이터베이스 연결 실패: {error}")
+                            return
                             
+                        try:
                             # 사용자 존재 여부 확인
                             cur = conn.cursor()
                             try:
                                 cur.execute("SELECT COUNT(*) FROM users WHERE username=%s", (nu,))
                                 count = cur.fetchone()[0]
-                                cur.close()
                                 
                                 if count > 0:
                                     st.error("이미 존재하는 아이디입니다.")
+                                    cur.close()
+                                    conn.close()
                                     return
                             except Exception as e:
                                 # 테이블이 없을 수 있음
-                                cur.close()
+                                pass
                             
                             # 강제 탈퇴 확인
-                            cur = conn.cursor()
                             try:
                                 cur.execute("SELECT COUNT(*) FROM kicked_users WHERE username=%s", (nu,))
                                 is_kicked = cur.fetchone()[0] > 0
-                                cur.close()
                                 
                                 if is_kicked:
                                     st.error("이 사용자명은 사용할 수 없습니다. 다른 이름을 선택해주세요.")
+                                    cur.close()
+                                    conn.close()
                                     return
                             except Exception as e:
                                 # 테이블이 없을 수 있음
-                                cur.close()
+                                pass
                             
                             # 새 사용자 생성
-                            cur = conn.cursor()
                             try:
                                 cur.execute(
                                     "INSERT INTO users (username, password, role, bio, avatar_url) VALUES (%s, %s, %s, %s, %s) RETURNING user_id",
@@ -194,7 +231,6 @@ def render_login_sidebar():
                                 )
                                 new_user_id = cur.fetchone()[0]
                                 conn.commit()
-                                cur.close()
                                 
                                 # 자동 로그인
                                 st.session_state.logged_in = True
@@ -203,6 +239,8 @@ def render_login_sidebar():
                                 st.session_state.role = "일반학생"
                                 
                                 st.success("회원가입 완료되었습니다.")
+                                cur.close()
+                                conn.close()
                                 st.rerun()
                             except Exception as e:
                                 conn.rollback()
@@ -210,14 +248,12 @@ def render_login_sidebar():
                                 
                                 # 테이블 존재 확인
                                 try:
-                                    cur = conn.cursor()
                                     cur.execute("""
                                         SELECT EXISTS (
                                             SELECT 1 FROM information_schema.tables WHERE table_name = 'users'
                                         )
                                     """)
                                     table_exists = cur.fetchone()[0]
-                                    cur.close()
                                     
                                     if not table_exists:
                                         st.warning("데이터베이스가 초기화되지 않았습니다.")
@@ -227,6 +263,12 @@ def render_login_sidebar():
                         except Exception as e:
                             st.error(f"데이터베이스 연결 오류: {str(e)}")
                             st.info("관리자에게 문의하세요.")
+                        finally:
+                            try:
+                                cur.close()
+                                conn.close()
+                            except:
+                                pass
             
             else:  # 게스트 로그인
                 if st.button("게스트 로그인"):

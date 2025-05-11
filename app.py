@@ -5,6 +5,9 @@ from libs.db import get_conn
 from libs.auth import render_login_sidebar
 from libs.ui_helpers import header
 from pages.notices import render_notices
+import time
+import psycopg2
+import traceback
 
 # Initialize session state variables
 if 'logged_in' not in st.session_state:
@@ -17,26 +20,61 @@ if 'username' not in st.session_state:
     st.session_state.username = None
 if 'db_initialized' not in st.session_state:
     st.session_state.db_initialized = False
+if 'last_db_check' not in st.session_state:
+    st.session_state.last_db_check = 0
+
+# Function to get a fresh connection for each operation
+def get_fresh_connection():
+    """Get a completely fresh database connection for this operation"""
+    try:
+        # Create a brand new connection using secrets
+        conn = psycopg2.connect(
+            user=st.secrets["user"],
+            password=st.secrets["password"],
+            host=st.secrets["host"],
+            port=st.secrets["port"],
+            dbname=st.secrets["dbname"],
+            keepalives=1,
+            keepalives_idle=30,
+            keepalives_interval=10,
+            keepalives_count=5
+        )
+        conn.autocommit = True
+        return conn, None
+    except Exception as e:
+        return None, str(e)
 
 # Global auto-refresh (30 seconds)
 st_autorefresh(interval=30000, key="global_autorefresh")
 
-# Check if database is properly connected
-db_connected = False
-try:
-    # Get a new connection for this check, don't rely on cached connections
-    get_conn()
+# Only check database connection once every 5 minutes to reduce overhead
+current_time = time.time()
+if current_time - st.session_state.last_db_check > 300:  # 5 minutes in seconds
+    # Check if database is properly connected (without using cached connections)
+    conn, error = get_fresh_connection()
+    if conn:
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT 1")
+            cur.fetchone()
+            cur.close()
+            conn.close()
+            db_connected = True
+            # Update last check time
+            st.session_state.last_db_check = current_time
+        except Exception as e:
+            db_connected = False
+            st.error(f"Database connection error: {str(e)}")
+    else:
+        db_connected = False
+        st.error(f"Database connection error: {error}")
+else:
+    # Use the last known database connection status
     db_connected = True
-except Exception as e:
-    st.error(f"Database connection error: {str(e)}")
-    st.warning("Please check your database configuration in .streamlit/secrets.toml")
 
 # Render login sidebar only if database is connected
 if db_connected:
-    try:
-        render_login_sidebar()
-    except Exception as e:
-        st.error(f"Login sidebar error: {str(e)}")
+    render_login_sidebar()
 
 # Render header
 header()
@@ -71,65 +109,26 @@ if db_connected:
             
             if st.button("데이터베이스 테이블 초기화", key="init_db_button"):
                 try:
-                    from libs.db import init_tables
-                    init_tables()
-                    st.session_state.db_initialized = True
-                    st.success("데이터베이스 테이블이 성공적으로 초기화되었습니다!")
-                    st.info("페이지를 새로고침하면 모든 기능이 활성화됩니다.")
+                    conn, error = get_fresh_connection()
+                    if conn:
+                        from libs.db import init_tables
+                        init_tables()
+                        st.session_state.db_initialized = True
+                        st.success("데이터베이스 테이블이 성공적으로 초기화되었습니다!")
+                        st.info("페이지를 새로고침하면 모든 기능이 활성화됩니다.")
+                        conn.close()
+                    else:
+                        st.error(f"데이터베이스 연결 실패: {error}")
                 except Exception as e:
                     st.error(f"데이터베이스 초기화 오류: {str(e)}")
+                    st.code(traceback.format_exc())
             
             if st.session_state.db_initialized:
                 st.success("데이터베이스가 초기화되었습니다!")
             
 else:
     st.header("⚠️ 데이터베이스 연결 오류")
-    st.write("데이터베이스에 연결할 수 없습니다. 관리자에게 문의해주세요.")
+    st.write("데이터베이스에 연결할 수 없습니다. 관리자에게 문의하거나 데이터베이스 진단 페이지에서 연결을 확인해보세요.")
     
-    # Show troubleshooting information for admins
-    with st.expander("문제 해결 정보"):
-        st.write("""
-        1. `.streamlit/secrets.toml` 파일이 올바르게 설정되어 있는지 확인하세요.
-        2. 데이터베이스 서버가 실행 중인지 확인하세요.
-        3. 데이터베이스 사용자 이름, 비밀번호, 호스트 등이 올바른지 확인하세요.
-        4. 방화벽 설정을 확인하세요.
-        """)
-        
-        # Database connection test form
-        st.subheader("데이터베이스 연결 테스트")
-        
-        with st.form("db_test_form"):
-            db_user = st.text_input("사용자 이름", value=st.secrets["user"])
-            db_password = st.text_input("비밀번호", type="password", value=st.secrets["password"])
-            db_host = st.text_input("호스트", value=st.secrets["host"])
-            db_port = st.text_input("포트", value=st.secrets["port"])
-            db_name = st.text_input("데이터베이스 이름", value=st.secrets["dbname"])
-            
-            submit = st.form_submit_button("연결 테스트")
-            
-            if submit:
-                try:
-                    import psycopg2
-                    test_conn = psycopg2.connect(
-                        user=db_user,
-                        password=db_password,
-                        host=db_host,
-                        port=db_port,
-                        dbname=db_name
-                    )
-                    test_cur = test_conn.cursor()
-                    test_cur.execute("SELECT 1")
-                    test_cur.fetchone()
-                    test_cur.close()
-                    test_conn.close()
-                    
-                    st.success("데이터베이스 연결 성공!")
-                    st.info("앱을 새로고침하면 정상적으로 작동할 것입니다.")
-                except Exception as e:
-                    st.error(f"연결 테스트 실패: {str(e)}")
-                    st.info("위 오류 메시지를 확인하고 연결 정보를 수정하세요.")
-        
-        st.markdown("---")
-        st.info("설정을 변경한 후 앱을 다시 시작하세요.")
-        if st.button("앱 새로고침"):
-            st.rerun()
+    if st.button("데이터베이스 진단 페이지로 이동"):
+        st.switch_page("pages/데이터베이스_진단.py")
