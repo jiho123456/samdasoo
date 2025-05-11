@@ -9,12 +9,7 @@ import traceback
 
 # Check if user is logged in and is admin
 if not st.session_state.get('logged_in'):
-    st.warning("로그인이 필요합니다.")
-    st.stop()
-
-if st.session_state.get('role') not in ['teacher', '제작자']:
-    st.error("관리자만 접근할 수 있습니다.")
-    st.stop()
+    st.warning("로그인 권장입니다.")
 
 st.title("데이터베이스 수리")
 st.write("데이터베이스 에러나면 여기서 절차 밟고 수리하세요.")
