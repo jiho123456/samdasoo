@@ -13,9 +13,9 @@ import webbrowser
 load_dotenv()
 
 # Spotify API credentials
-SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
-SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
-SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8501/')
+SPOTIFY_CLIENT_ID = st.secrets['SPOTIFY_CLIENT_ID']
+SPOTIFY_CLIENT_SECRET = st.secrets['SPOTIFY_CLIENT_SECRET']
+SPOTIFY_REDIRECT_URI = st.secrets['SPOTIFY_REDIRECT_URI']
 
 st.title("점심시간 노래 재생기")
 
