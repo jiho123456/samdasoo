@@ -60,15 +60,6 @@ audio_html = """
                                 <p style="font-size: 12px; color: gray;">실제 dB: ${db.toFixed(1)} (보정값: +100)</p>
                             </div>
                         `;
-                        
-                        // Send the real dB value to Streamlit
-                        if (window.parent && window.parent.Streamlit) {
-                            const dbValues = {
-                                "real_db": db,
-                                "display_db": displayDb
-                            };
-                            window.parent.Streamlit.setComponentValue(JSON.stringify(dbValues));
-                        }
                     }
                 };
             })
@@ -86,20 +77,8 @@ audio_html = """
 </script>
 """
 
-# Display the audio capture interface with component state
-component_value = st.components.v1.html(audio_html, height=150, key="db_meter")
-
-# Extract values from component if available
-current_db = -1
-display_db = 99  # Default values
-if component_value:
-    try:
-        import json
-        values = json.loads(component_value)
-        current_db = values.get("real_db", -1)
-        display_db = values.get("display_db", 99)
-    except:
-        pass
+# Simple display with no extra parameters - using a different method
+st.markdown(f'<div style="height:150px">{audio_html}</div>', unsafe_allow_html=True)
 
 # Function to get sound description
 def get_sound_description(db_level):
@@ -127,9 +106,8 @@ def get_sound_description(db_level):
 
 # Display additional information
 st.subheader("소리 정보")
-st.write(f"현재 소리 수준: **{display_db:.1f} dB** (보정값: +100)")
-st.write(f"실제 소리 수준: **{current_db:.1f} dB**")
-st.write(get_sound_description(current_db))
+st.write("데시벨 측정기는 마이크를 통해 소리를 측정하여 보여줍니다.")
+st.write("위 측정기에서 측정값을 확인하세요.")
 
 # Add explanation about the +100 adjustment
 st.info("""
@@ -137,9 +115,20 @@ st.info("""
 또한 웹 마이크로 측정한 값이므로 정확한 측정을 위해서는 전문 장비가 필요합니다.
 """)
 
-# Add auto-refresh with longer interval to reduce flickering
-st_autorefresh = st.empty()
-st_autorefresh.code("소음 측정 중...", language=None)
+# Add sound level reference
+st.subheader("소리 수준 참고")
+reference_data = {
+    "소리 유형": ["나뭇잎 부딪히는 소리", "속삭이는 소리", "도서관 내 소음", "일반적인 대화", 
+                "시끄러운 레스토랑", "전화벨 소리", "시끄러운 거리", "전동 공구 소음", 
+                "비행기 이륙 소음", "제트기 엔진 소음"],
+    "실제 dB": ["0-20", "20-30", "30-40", "40-50", "50-60", "60-70", "70-80", "80-90", "90-100", "100+"],
+    "보정 dB": ["100-120", "120-130", "130-140", "140-150", "150-160", "160-170", "170-180", "180-190", "190-200", "200+"]
+}
+st.table(reference_data)
+
+# Remove auto-refresh to avoid potential issues
+# st_autorefresh = st.empty()
+# st_autorefresh.code("소음 측정 중...", language=None)
 
 
 
