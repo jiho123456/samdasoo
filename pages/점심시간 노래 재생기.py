@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import time
 import socket
 import random
+import json
 
 # Load environment variables
 load_dotenv()
@@ -29,14 +30,17 @@ if 'sp' not in st.session_state:
 if 'sp_last_refresh' not in st.session_state:
     st.session_state.sp_last_refresh = 0
 if 'playlists' not in st.session_state:
+    # Make sure sample tracks have uri field
     st.session_state.playlists = {
         "점심시간 인기곡": [
-            {"name": "샘플 곡 1", "id": "sample1", "artists": [{"name": "아티스트 1"}]},
-            {"name": "샘플 곡 2", "id": "sample2", "artists": [{"name": "아티스트 2"}]}
+            {"name": "샘플 곡 1", "id": "sample1", "artists": [{"name": "아티스트 1"}], "uri": "spotify:track:sample1"},
+            {"name": "샘플 곡 2", "id": "sample2", "artists": [{"name": "아티스트 2"}], "uri": "spotify:track:sample2"}
         ]
     }
 if 'selected_tracks' not in st.session_state:
     st.session_state.selected_tracks = []
+if 'user_playlists' not in st.session_state:
+    st.session_state.user_playlists = {}
 
 # Initialize Spotify client with cache timeout to avoid port conflicts
 def init_spotify():
@@ -94,17 +98,28 @@ def search_tracks(sp, query):
 def create_spotify_embed(track_id):
     return f'<iframe src="https://open.spotify.com/embed/track/{track_id}" width="300" height="80" frameborder="0" allowtransparency="true" allow="encrypted-media"></iframe>'
 
+# Check if track has required fields, add defaults if not
+def ensure_track_fields(track):
+    if not track.get('uri') and track.get('id'):
+        track['uri'] = f"spotify:track:{track['id']}"
+    return track
+
 # Play next track in queue
 def play_next_track():
     if st.session_state.queue:
         next_track = st.session_state.queue[0]  # Get first track without removing
+        # Ensure track has uri field
+        next_track = ensure_track_fields(next_track)
         st.session_state.current_track = next_track
         try:
             sp = init_spotify()
-            if sp:
+            if sp and next_track.get('uri'):
                 sp.start_playback(uris=[next_track['uri']])
                 st.session_state.is_playing = True
                 return True
+            else:
+                st.error(f"곡에 필요한 정보가 없습니다: {next_track.get('name', '제목 없음')}")
+                return False
         except Exception as e:
             st.error(f"재생 중 오류 발생: {str(e)}")
             return False
@@ -140,20 +155,74 @@ def add_to_queue(tracks):
         return False
     
     if isinstance(tracks, list):
+        # Ensure all tracks have uri field
+        tracks = [ensure_track_fields(track) for track in tracks]
         st.session_state.queue.extend(tracks)
         if len(tracks) == 1:
             st.success(f"{tracks[0]['name']}을(를) 대기열에 추가했습니다!")
         else:
             st.success(f"{len(tracks)}곡을 대기열에 추가했습니다!")
     else:
-        st.session_state.queue.append(tracks)
-        st.success(f"{tracks['name']}을(를) 대기열에 추가했습니다!")
+        # Ensure track has uri field
+        track = ensure_track_fields(tracks)
+        st.session_state.queue.append(track)
+        st.success(f"{track['name']}을(를) 대기열에 추가했습니다!")
     
     # If nothing is playing, start playing the first track
     if not st.session_state.current_track:
         play_next_track()
     
     return True
+
+# Save tracks to playlist
+def save_to_playlist(playlist_name, tracks):
+    if not tracks:
+        return False
+    
+    if not playlist_name:
+        st.error("플레이리스트 이름을 입력해주세요.")
+        return False
+    
+    # Ensure all tracks have required fields
+    if isinstance(tracks, list):
+        tracks = [ensure_track_fields(track) for track in tracks]
+    else:
+        tracks = [ensure_track_fields(tracks)]
+    
+    # Update or create playlist
+    if playlist_name in st.session_state.user_playlists:
+        # Check for duplicates
+        existing_ids = [t.get('id') for t in st.session_state.user_playlists[playlist_name]]
+        new_tracks = [t for t in tracks if t.get('id') not in existing_ids]
+        if new_tracks:
+            st.session_state.user_playlists[playlist_name].extend(new_tracks)
+            st.success(f"{len(new_tracks)}곡을 '{playlist_name}' 플레이리스트에 추가했습니다!")
+        else:
+            st.info("이미 모든 곡이 플레이리스트에 있습니다.")
+    else:
+        st.session_state.user_playlists[playlist_name] = tracks
+        st.success(f"{len(tracks)}곡을 '{playlist_name}' 플레이리스트에 추가했습니다!")
+    
+    # Save playlists to disk (optional)
+    try:
+        os.makedirs("playlists", exist_ok=True)
+        with open(f"playlists/{playlist_name}.json", "w", encoding="utf-8") as f:
+            json.dump(st.session_state.user_playlists[playlist_name], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        st.warning(f"플레이리스트 저장 중 오류: {str(e)}")
+    
+    return True
+
+# Load playlist from saved file (optional)
+def load_playlist(playlist_name):
+    try:
+        with open(f"playlists/{playlist_name}.json", "r", encoding="utf-8") as f:
+            playlist = json.load(f)
+            st.session_state.user_playlists[playlist_name] = playlist
+            return playlist
+    except Exception as e:
+        st.error(f"플레이리스트 로드 중 오류: {str(e)}")
+        return []
 
 # Main app
 def main():
@@ -197,6 +266,15 @@ def main():
                     st.session_state.queue = []
                     st.success("대기열이 비워졌습니다.")
                     st.rerun()
+            
+            # Add button to save current track to playlist
+            with st.expander("현재 곡을 플레이리스트에 저장"):
+                playlist_name = st.text_input("플레이리스트 이름:", key="save_current_playlist")
+                if st.button("저장", key="save_current_btn"):
+                    if playlist_name:
+                        save_to_playlist(playlist_name, st.session_state.current_track)
+                    else:
+                        st.error("플레이리스트 이름을 입력해주세요.")
             
             # Check if track finished and play next
             try:
@@ -248,6 +326,22 @@ def main():
                     else:
                         play_next_track()
                         st.rerun()
+            
+            # Add button to save queue to playlist
+            with st.expander("대기열을 플레이리스트로 저장"):
+                queue_playlist_name = st.text_input("플레이리스트 이름:", key="save_queue_playlist")
+                if st.button("대기열 저장", key="save_queue_btn"):
+                    if queue_playlist_name:
+                        # Get selected tracks from queue or all if none selected
+                        tracks_to_save = []
+                        if selected_indices:
+                            tracks_to_save = [st.session_state.queue[i] for i in selected_indices]
+                        else:
+                            tracks_to_save = st.session_state.queue
+                        
+                        save_to_playlist(queue_playlist_name, tracks_to_save)
+                    else:
+                        st.error("플레이리스트 이름을 입력해주세요.")
         else:
             st.info("대기열이 비어있습니다")
             
@@ -256,6 +350,42 @@ def main():
                 st.session_state.selected_tracks = st.session_state.playlists["점심시간 인기곡"]
                 add_to_queue(st.session_state.selected_tracks)
                 st.rerun()
+        
+        # User playlists section
+        st.subheader("내 플레이리스트")
+        if st.session_state.user_playlists:
+            playlist_names = list(st.session_state.user_playlists.keys())
+            selected_playlist = st.selectbox("플레이리스트 선택", playlist_names)
+            
+            if selected_playlist:
+                playlist_tracks = st.session_state.user_playlists[selected_playlist]
+                st.write(f"**{selected_playlist}** - {len(playlist_tracks)}곡")
+                
+                # Show playlist tracks
+                for i, track in enumerate(playlist_tracks):
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.write(f"{i+1}. {track['name']} - {track['artists'][0]['name']}")
+                    with col2:
+                        if st.button("재생", key=f"play_pl_{i}"):
+                            add_to_queue(track)
+                            st.rerun()
+                
+                # Add buttons for playlist actions
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("전체 재생", key="play_all"):
+                        add_to_queue(playlist_tracks)
+                        st.rerun()
+                with col2:
+                    if st.button("섞어서 재생", key="shuffle_play"):
+                        shuffled = playlist_tracks.copy()
+                        random.shuffle(shuffled)
+                        add_to_queue(shuffled)
+                        st.rerun()
+        else:
+            st.info("저장된 플레이리스트가 없습니다.")
+            st.write("노래를 검색하고 플레이리스트에 저장해보세요.")
         
         # Search section
         st.subheader("노래 검색")
@@ -281,19 +411,38 @@ def main():
                 
                 # Show all search results with embeds
                 for i, track in enumerate(results):
-                    col1, col2 = st.columns([3, 1])
+                    col1, col2, col3 = st.columns([3, 1, 1])
                     with col1:
                         st.write(f"**{track['name']}** - {track['artists'][0]['name']}")
                         st.markdown(create_spotify_embed(track['id']), unsafe_allow_html=True)
                     with col2:
                         if i in selected_result_indices:
                             st.success("선택됨")
+                    with col3:
+                        # Add direct playlist save button for each track
+                        if st.button("플레이리스트에 저장", key=f"save_track_{i}"):
+                            with st.form(key=f"save_form_{i}"):
+                                pl_name = st.text_input("플레이리스트 이름:", key=f"pl_name_{i}")
+                                submitted = st.form_submit_button("저장")
+                                if submitted and pl_name:
+                                    save_to_playlist(pl_name, track)
                 
                 # Add button to add selected tracks
                 if st.button("선택한 곡 대기열에 추가") and selected_result_indices:
                     selected_tracks = [results[i] for i in selected_result_indices]
                     add_to_queue(selected_tracks)
                     st.rerun()
+                
+                # Add button to save selected tracks to playlist
+                if selected_result_indices:
+                    with st.expander("선택한 곡을 플레이리스트에 저장"):
+                        search_playlist_name = st.text_input("플레이리스트 이름:", key="save_search_playlist")
+                        if st.button("플레이리스트에 저장", key="save_search_btn"):
+                            if search_playlist_name:
+                                tracks_to_save = [results[i] for i in selected_result_indices]
+                                save_to_playlist(search_playlist_name, tracks_to_save)
+                            else:
+                                st.error("플레이리스트 이름을 입력해주세요.")
             else:
                 st.write("검색 결과가 없습니다")
         
