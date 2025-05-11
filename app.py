@@ -128,7 +128,14 @@ if db_connected:
             
 else:
     st.header("⚠️ 데이터베이스 연결 오류")
-    st.write("데이터베이스에 연결할 수 없습니다. 관리자에게 문의하거나 데이터베이스 진단 페이지에서 연결을 확인해보세요.")
+    st.write("데이터베이스에 연결할 수 없습니다. 아래 버튼을 클릭하여 연결 문제를 자동으로 수정하세요.")
     
-    if st.button("데이터베이스 진단 페이지로 이동"):
-        st.switch_page("pages/데이터베이스_진단.py")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("연결 문제 자동 수정"):
+            st.switch_page("pages/connection_fix.py")
+    with col2:
+        if st.button("데이터베이스 진단 페이지"):
+            st.switch_page("pages/데이터베이스_진단.py")
+    
+    st.info("만약 문제가 계속되면 관리자에게 문의하세요.")

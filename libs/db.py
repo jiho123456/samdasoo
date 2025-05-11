@@ -2,46 +2,107 @@
 import streamlit as st
 import psycopg2
 import psycopg2.errors
+import time
 
-@st.cache_resource(ttl=300)  # Cache for 5 minutes
+# Remove cache to prevent connection from being reused
 def get_conn():
-    """데이터베이스 연결을 가져오거나 새로 생성합니다."""
+    """
+    데이터베이스 연결을 가져오거나 새로 생성합니다.
+    항상 새로운 연결을 반환하여 "connection already closed" 오류를 방지합니다.
+    """
     try:
-        # Check if we already have a connection in session state
-        if "db_conn" in st.session_state and st.session_state.db_conn:
-            conn = st.session_state.db_conn
-            
-            # Test if connection is still alive
-            try:
-                cur = conn.cursor()
-                cur.execute("SELECT 1")
-                cur.close()
-                return conn
-            except (psycopg2.InterfaceError, psycopg2.OperationalError):
-                # Connection is dead, create a new one
-                pass
-        
-        # Create a new connection
+        # Always create a brand new connection
         conn = psycopg2.connect(
             user=st.secrets["user"],
             password=st.secrets["password"],
             host=st.secrets["host"],
             port=st.secrets["port"],
             dbname=st.secrets["dbname"],
+            # Connection timeout parameters
             keepalives=1,
             keepalives_idle=30,
             keepalives_interval=10,
             keepalives_count=5
         )
         conn.autocommit = True
-        
-        # Store connection in session state
-        st.session_state.db_conn = conn
-        
         return conn
     except Exception as e:
         st.error(f"데이터베이스 연결 오류: {str(e)}")
         raise e
+
+def db_operation(operation_func, error_msg="데이터베이스 작업 중 오류가 발생했습니다"):
+    """
+    데이터베이스 작업을 안전하게 수행하는 헬퍼 함수입니다.
+    
+    Args:
+        operation_func: 실행할 함수 (conn 인자를 받아야 함)
+        error_msg: 오류 발생 시 표시할 메시지
+    
+    Returns:
+        작업 결과
+    """
+    conn = None
+    try:
+        # Get a fresh connection
+        conn = get_conn()
+        # Execute the operation
+        return operation_func(conn)
+    except Exception as e:
+        st.error(f"{error_msg}: {str(e)}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
+        raise e
+    finally:
+        # Always close the connection
+        if conn:
+            try:
+                conn.close()
+            except:
+                pass
+
+def select_query(query, params=None, fetch_all=True):
+    """
+    SELECT 쿼리를 실행하고 결과를 반환합니다.
+    
+    Args:
+        query: SQL 쿼리
+        params: 쿼리 파라미터
+        fetch_all: True면 fetchall(), False면 fetchone() 호출
+    
+    Returns:
+        쿼리 결과
+    """
+    def execute(conn):
+        cur = conn.cursor()
+        cur.execute(query, params)
+        result = cur.fetchall() if fetch_all else cur.fetchone()
+        cur.close()
+        return result
+    
+    return db_operation(execute, f"쿼리 실행 오류: {query}")
+
+def execute_query(query, params=None):
+    """
+    INSERT, UPDATE, DELETE 쿼리 등을 실행합니다.
+    
+    Args:
+        query: SQL 쿼리
+        params: 쿼리 파라미터
+    
+    Returns:
+        영향 받은 행 수
+    """
+    def execute(conn):
+        cur = conn.cursor()
+        cur.execute(query, params)
+        result = cur.rowcount
+        cur.close()
+        return result
+    
+    return db_operation(execute, f"쿼리 실행 오류: {query}")
 
 def init_tables(force_recreate=False):
     """
@@ -52,21 +113,14 @@ def init_tables(force_recreate=False):
                               False인 경우 존재하지 않는 테이블만 생성합니다.
     """
     try:
-        # 임시 커넥션
-        tmp_conn = psycopg2.connect(
-            user=st.secrets["user"],
-            password=st.secrets["password"],
-            host=st.secrets["host"],
-            port=st.secrets["port"],
-            dbname=st.secrets["dbname"]
-        )
-        tmp_conn.autocommit = True
-        tmp_cur = tmp_conn.cursor()
+        # Always use a fresh connection
+        conn = get_conn()
+        cur = conn.cursor()
 
         # 기존 테이블 삭제 (force_recreate가 True인 경우에만)
         if force_recreate:
             st.info("기존 테이블을 삭제하고 새로 생성합니다...")
-            tmp_cur.execute("""
+            cur.execute("""
                 DROP TABLE IF EXISTS refunds CASCADE;
                 DROP TABLE IF EXISTS user_items CASCADE;
                 DROP TABLE IF EXISTS shop_items CASCADE;
@@ -88,7 +142,7 @@ def init_tables(force_recreate=False):
             st.info("누락된 테이블만 생성합니다...")
 
         # Users 테이블 생성 (with roles, currency, and password)
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id SERIAL PRIMARY KEY,
                 username TEXT UNIQUE NOT NULL,
@@ -103,7 +157,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Jobs 테이블 생성
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS jobs (
                 job_id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -115,7 +169,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Quests/Missions 테이블 생성
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS quests (
                 quest_id SERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -128,7 +182,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Quest Completions 테이블 생성
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS quest_completions (
                 completion_id SERIAL PRIMARY KEY,
                 quest_id INTEGER REFERENCES quests(quest_id),
@@ -140,7 +194,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Transactions 테이블 생성
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 transaction_id SERIAL PRIMARY KEY,
                 from_user_id INTEGER REFERENCES users(user_id),
@@ -154,7 +208,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Shop Items Table (for profile items)
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS shop_items (
                 item_id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -167,7 +221,7 @@ def init_tables(force_recreate=False):
         """)
 
         # User Items Table (inventory of purchased items)
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS user_items (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(user_id),
@@ -179,7 +233,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Blog Posts Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS blog_posts (
                 post_id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(user_id),
@@ -192,7 +246,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Blog Comments Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS blog_comments (
                 comment_id SERIAL PRIMARY KEY,
                 post_id INTEGER REFERENCES blog_posts(post_id),
@@ -203,7 +257,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Kicked Users Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS kicked_users (
                 username TEXT PRIMARY KEY,
                 reason TEXT NOT NULL,
@@ -212,7 +266,7 @@ def init_tables(force_recreate=False):
         """)
 
         # Refunds Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS refunds (
                 refund_id SERIAL PRIMARY KEY,
                 user_item_id INTEGER REFERENCES user_items(id),
@@ -226,7 +280,7 @@ def init_tables(force_recreate=False):
         """)
         
         # Notices Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS notices (
                 notice_id SERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
@@ -240,7 +294,7 @@ def init_tables(force_recreate=False):
         """)
         
         # Suggestions Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS suggestions (
                 id SERIAL PRIMARY KEY,
                 content TEXT NOT NULL,
@@ -252,7 +306,7 @@ def init_tables(force_recreate=False):
         """)
         
         # Stocks Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS stocks (
                 stock_id SERIAL PRIMARY KEY,
                 symbol TEXT UNIQUE NOT NULL,
@@ -265,7 +319,7 @@ def init_tables(force_recreate=False):
         """)
         
         # Stock Portfolios Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS stock_portfolios (
                 portfolio_id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(user_id),
@@ -279,7 +333,7 @@ def init_tables(force_recreate=False):
         """)
         
         # Stock Transactions Table
-        tmp_cur.execute("""
+        cur.execute("""
             CREATE TABLE IF NOT EXISTS stock_transactions (
                 transaction_id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(user_id),
@@ -291,10 +345,25 @@ def init_tables(force_recreate=False):
             );
         """)
 
-        tmp_conn.commit()
+        conn.commit()
         st.success("데이터베이스 테이블이 성공적으로 생성되었습니다!")
     except Exception as e:
         st.error(f"데이터베이스 초기화 오류: {str(e)}")
+        if conn:
+            try:
+                conn.rollback()
+            except:
+                pass
         raise e
     finally:
-        tmp_conn.close()  # 여기만 닫고, 캐시된 커넥션은 손대지 않습니다.
+        # Always close the connection
+        if 'cur' in locals() and cur:
+            try:
+                cur.close()
+            except:
+                pass
+        if 'conn' in locals() and conn:
+            try:
+                conn.close()
+            except:
+                pass
