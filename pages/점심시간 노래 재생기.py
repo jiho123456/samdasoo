@@ -28,6 +28,15 @@ if 'sp' not in st.session_state:
     st.session_state.sp = None
 if 'sp_last_refresh' not in st.session_state:
     st.session_state.sp_last_refresh = 0
+if 'playlists' not in st.session_state:
+    st.session_state.playlists = {
+        "점심시간 인기곡": [
+            {"name": "샘플 곡 1", "id": "sample1", "artists": [{"name": "아티스트 1"}]},
+            {"name": "샘플 곡 2", "id": "sample2", "artists": [{"name": "아티스트 2"}]}
+        ]
+    }
+if 'selected_tracks' not in st.session_state:
+    st.session_state.selected_tracks = []
 
 # Initialize Spotify client with cache timeout to avoid port conflicts
 def init_spotify():
@@ -75,7 +84,7 @@ def init_spotify():
 # Search for tracks
 def search_tracks(sp, query):
     try:
-        results = sp.search(q=query, type='track', limit=5)
+        results = sp.search(q=query, type='track', limit=10)
         return results['tracks']['items']
     except Exception as e:
         st.error(f"검색 오류: {str(e)}")
@@ -100,6 +109,51 @@ def play_next_track():
             st.error(f"재생 중 오류 발생: {str(e)}")
             return False
     return False
+
+# Shuffle the queue
+def shuffle_queue():
+    if len(st.session_state.queue) > 1:
+        random.shuffle(st.session_state.queue)
+        st.success("대기열이 섞였습니다!")
+        return True
+    return False
+
+# Skip to next track
+def skip_track():
+    if len(st.session_state.queue) > 0:
+        # Remove current track
+        st.session_state.queue.pop(0)
+        # Play next track if available
+        if st.session_state.queue:
+            play_next_track()
+            st.success("다음 곡으로 넘어갑니다.")
+            return True
+        else:
+            st.session_state.current_track = None
+            st.session_state.is_playing = False
+            st.info("더 이상 재생할 곡이 없습니다.")
+    return False
+
+# Add tracks to queue
+def add_to_queue(tracks):
+    if not tracks:
+        return False
+    
+    if isinstance(tracks, list):
+        st.session_state.queue.extend(tracks)
+        if len(tracks) == 1:
+            st.success(f"{tracks[0]['name']}을(를) 대기열에 추가했습니다!")
+        else:
+            st.success(f"{len(tracks)}곡을 대기열에 추가했습니다!")
+    else:
+        st.session_state.queue.append(tracks)
+        st.success(f"{tracks['name']}을(를) 대기열에 추가했습니다!")
+    
+    # If nothing is playing, start playing the first track
+    if not st.session_state.current_track:
+        play_next_track()
+    
+    return True
 
 # Main app
 def main():
@@ -128,6 +182,22 @@ def main():
             st.write(f"**{st.session_state.current_track['name']}** - {st.session_state.current_track['artists'][0]['name']}")
             st.markdown(create_spotify_embed(st.session_state.current_track['id']), unsafe_allow_html=True)
             
+            # Add playback control buttons
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("⏭️ 다음 곡"):
+                    skip_track()
+                    st.rerun()
+            with col2:
+                if st.button("🔀 대기열 섞기"):
+                    shuffle_queue()
+                    st.rerun()
+            with col3:
+                if st.button("🗑️ 대기열 비우기"):
+                    st.session_state.queue = []
+                    st.success("대기열이 비워졌습니다.")
+                    st.rerun()
+            
             # Check if track finished and play next
             try:
                 current_playback = sp.current_playback()
@@ -142,20 +212,50 @@ def main():
         # Queue display and controls
         st.subheader("재생 대기열")
         if st.session_state.queue:
-            for i, track in enumerate(st.session_state.queue):
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.write(f"{i+1}. {track['name']} - {track['artists'][0]['name']}")
-                with col2:
-                    if st.button("삭제", key=f"remove_{track['id']}"):
-                        st.session_state.queue.pop(i)
+            # Show queue as a structured list with selection functionality
+            track_names = [f"{i+1}. {track['name']} - {track['artists'][0]['name']}" for i, track in enumerate(st.session_state.queue)]
+            
+            # Use multiselect for multiple track selection
+            selected_indices = []
+            selected_tracks = st.multiselect("재생할 곡 선택 (여러 곡 선택 가능)", track_names, format_func=lambda x: x)
+            
+            # Get indices of selected tracks
+            for selected in selected_tracks:
+                for i, track_name in enumerate(track_names):
+                    if selected == track_name:
+                        selected_indices.append(i)
+            
+            # Show queue management buttons
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("선택한 곡 삭제") and selected_indices:
+                    # Remove tracks in reverse order to avoid index shifting
+                    for index in sorted(selected_indices, reverse=True):
+                        if index < len(st.session_state.queue):
+                            st.session_state.queue.pop(index)
+                    st.success("선택한 곡을 대기열에서 삭제했습니다.")
+                    st.rerun()
+            
+            with col2:
+                if st.button("선택한 곡 재생") and selected_indices:
+                    # Reorder queue to play selected song first (move it to the beginning)
+                    first_selected = min(selected_indices)
+                    if first_selected > 0:  # If not already the first song
+                        track_to_play = st.session_state.queue.pop(first_selected)
+                        st.session_state.queue.insert(0, track_to_play)
+                        play_next_track()
                         st.rerun()
-                with col3:
-                    if i == 0 and st.button("재생", key=f"play_{track['id']}"):
+                    else:
                         play_next_track()
                         st.rerun()
         else:
-            st.write("대기열이 비어있습니다")
+            st.info("대기열이 비어있습니다")
+            
+            # Suggest some popular tracks when queue is empty
+            if st.button("인기 음악 추천 받기"):
+                st.session_state.selected_tracks = st.session_state.playlists["점심시간 인기곡"]
+                add_to_queue(st.session_state.selected_tracks)
+                st.rerun()
         
         # Search section
         st.subheader("노래 검색")
@@ -165,18 +265,35 @@ def main():
             
             if results:
                 st.write("검색 결과:")
-                for track in results:
+                
+                # Create a list of track names for multiselect
+                result_track_names = [f"{track['name']} - {track['artists'][0]['name']}" for track in results]
+                selected_result_indices = []
+                
+                # Use multiselect for track selection
+                selected_results = st.multiselect("대기열에 추가할 곡 선택 (여러 곡 선택 가능)", result_track_names, format_func=lambda x: x)
+                
+                # Get indices of selected tracks from results
+                for selected in selected_results:
+                    for i, track_name in enumerate(result_track_names):
+                        if selected == track_name:
+                            selected_result_indices.append(i)
+                
+                # Show all search results with embeds
+                for i, track in enumerate(results):
                     col1, col2 = st.columns([3, 1])
                     with col1:
                         st.write(f"**{track['name']}** - {track['artists'][0]['name']}")
                         st.markdown(create_spotify_embed(track['id']), unsafe_allow_html=True)
                     with col2:
-                        if st.button("대기열에 추가", key=track['id']):
-                            st.session_state.queue.append(track)
-                            st.success(f"{track['name']}을(를) 대기열에 추가했습니다!")
-                            if not st.session_state.current_track:
-                                play_next_track()
-                            st.rerun()
+                        if i in selected_result_indices:
+                            st.success("선택됨")
+                
+                # Add button to add selected tracks
+                if st.button("선택한 곡 대기열에 추가") and selected_result_indices:
+                    selected_tracks = [results[i] for i in selected_result_indices]
+                    add_to_queue(selected_tracks)
+                    st.rerun()
             else:
                 st.write("검색 결과가 없습니다")
         
