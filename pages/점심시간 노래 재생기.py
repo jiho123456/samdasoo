@@ -13,11 +13,36 @@ import webbrowser
 load_dotenv()
 
 # Spotify API credentials
-SPOTIFY_CLIENT_ID = st.secrets['SPOTIFY_CLIENT_ID']
-SPOTIFY_CLIENT_SECRET = st.secrets['SPOTIFY_CLIENT_SECRET']
-SPOTIFY_REDIRECT_URI = st.secrets['SPOTIFY_REDIRECT_URI']
+SPOTIFY_CLIENT_ID = os.getenv('SPOTIFY_CLIENT_ID')
+SPOTIFY_CLIENT_SECRET = os.getenv('SPOTIFY_CLIENT_SECRET')
+# Default to a common Streamlit local port if not specified
+SPOTIFY_REDIRECT_URI = os.getenv('SPOTIFY_REDIRECT_URI', 'http://localhost:8501/redirect')
 
 st.title("점심시간 노래 재생기")
+
+# Display Spotify API setup instructions
+with st.expander("Spotify API 설정 방법"):
+    st.markdown("""
+    ### Spotify API 설정 방법
+    
+    1. [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications)에 로그인하세요.
+    2. "Create An App" 버튼을 클릭해 새 앱을 만드세요.
+    3. 앱 이름과 설명을 입력하고 생성하세요.
+    4. 생성된 앱 페이지에서 "Edit Settings" 버튼을 클릭하세요.
+    5. "Redirect URIs" 섹션에 다음 URI를 추가하세요:
+       - `http://localhost:8501/redirect`
+       - `http://localhost:8501`
+       - `http://localhost:8502/redirect`
+       - `http://localhost:8502`
+    6. Client ID와 Client Secret을 `.env` 파일에 다음과 같이 저장하세요:
+    ```
+    SPOTIFY_CLIENT_ID=your_client_id
+    SPOTIFY_CLIENT_SECRET=your_client_secret
+    SPOTIFY_REDIRECT_URI=http://localhost:8501/redirect
+    ```
+    
+    현재 사용 중인 리디렉션 URI: `{SPOTIFY_REDIRECT_URI}`
+    """)
 
 # Initialize session state for queue and playback
 if 'queue' not in st.session_state:
@@ -48,6 +73,8 @@ if 'auth_manager' not in st.session_state:
     st.session_state.auth_manager = None
 if 'is_authenticated' not in st.session_state:
     st.session_state.is_authenticated = False
+if 'redirect_uri' not in st.session_state:
+    st.session_state.redirect_uri = SPOTIFY_REDIRECT_URI
 
 # Create Spotify auth manager
 def create_auth_manager():
@@ -59,7 +86,7 @@ def create_auth_manager():
         auth_manager = SpotifyOAuth(
             client_id=SPOTIFY_CLIENT_ID,
             client_secret=SPOTIFY_CLIENT_SECRET,
-            redirect_uri=SPOTIFY_REDIRECT_URI,
+            redirect_uri=st.session_state.redirect_uri,
             scope="playlist-modify-public playlist-modify-private user-read-playback-state user-modify-playback-state",
             cache_path=cache_path,
             open_browser=False,
@@ -277,6 +304,17 @@ def main():
     with st.expander("Spotify 연결 정보", expanded=not st.session_state.is_authenticated):
         st.write("Spotify 계정으로 로그인하셔야 음악을 재생할 수 있습니다.")
         
+        # Option to change redirect URI if there are issues
+        st.write("리디렉션 URI 설정")
+        new_redirect_uri = st.text_input("리디렉션 URI:", st.session_state.redirect_uri)
+        if new_redirect_uri != st.session_state.redirect_uri:
+            st.session_state.redirect_uri = new_redirect_uri
+            st.session_state.auth_manager = None
+            st.session_state.auth_url = None
+            st.session_state.is_authenticated = False
+            st.info(f"리디렉션 URI가 변경되었습니다: {new_redirect_uri}")
+            st.info("이 URI를 Spotify Developer Dashboard에 추가해야 합니다.")
+        
         # Show different content based on authentication state
         if not st.session_state.is_authenticated:
             if st.button("Spotify 로그인 시작"):
@@ -297,27 +335,32 @@ def main():
                         st.error("브라우저를 열 수 없습니다. 위 링크를 직접 클릭해주세요.")
                 
                 # Code entry field
-                auth_code = st.text_input("로그인 후 리디렉션된 URL 또는 코드를 입력해주세요:")
-                if auth_code and st.button("인증 완료"):
-                    try:
-                        if st.session_state.auth_manager:
-                            # Extract code from URL if full URL was pasted
-                            if "?" in auth_code and "code=" in auth_code:
-                                auth_code = auth_code.split("code=")[1].split("&")[0]
-                            
-                            # Get access token
-                            token_info = st.session_state.auth_manager.get_access_token(auth_code)
-                            if token_info:
-                                st.session_state.is_authenticated = True
-                                sp = init_spotify()
-                                if sp:
-                                    user = sp.current_user()
-                                    st.success(f"성공적으로 로그인되었습니다! 안녕하세요 {user['display_name']}님!")
-                                    st.rerun()
-                            else:
-                                st.error("인증 코드가 올바르지 않습니다.")
-                    except Exception as e:
-                        st.error(f"인증 중 오류 발생: {str(e)}")
+                st.write("로그인 후 리디렉션되는 URL이나 코드를 아래에 붙여넣으세요.")
+                auth_code = st.text_input("리디렉션 URL 또는 코드:")
+                if auth_code:
+                    if st.button("인증 완료"):
+                        try:
+                            if st.session_state.auth_manager:
+                                # Extract code from URL if full URL was pasted
+                                if "?" in auth_code and "code=" in auth_code:
+                                    auth_code = auth_code.split("code=")[1].split("&")[0]
+                                
+                                # Get access token
+                                token_info = st.session_state.auth_manager.get_access_token(auth_code)
+                                if token_info:
+                                    st.session_state.is_authenticated = True
+                                    sp = init_spotify()
+                                    if sp:
+                                        user = sp.current_user()
+                                        st.success(f"성공적으로 로그인되었습니다! 안녕하세요 {user['display_name']}님!")
+                                        st.rerun()
+                                else:
+                                    st.error("인증 코드가 올바르지 않습니다.")
+                        except Exception as e:
+                            st.error(f"인증 중 오류 발생: {str(e)}")
+                            if "INVALID_CLIENT" in str(e):
+                                st.error("INVALID_CLIENT 오류: Spotify Developer Dashboard에서 리디렉션 URI 설정을 확인하세요.")
+                                st.info(f"현재 리디렉션 URI: {st.session_state.redirect_uri}")
         else:
             # Show connected status
             try:
